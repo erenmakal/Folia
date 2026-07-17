@@ -71,7 +71,7 @@
              "Build-Number" to (build ?: ""),
              "Build-Time" to buildTime.toString(),
              "Git-Branch" to gitBranch,
-@@ -316,7 +_,7 @@
+@@ -326,7 +_,7 @@
  }
  
  fill {
