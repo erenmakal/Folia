@@ -7321,7 +7321,7 @@ index 89b9d1a4122d502437d516f8affc5ba72f421f5f..587ec673a0821e91de67abaf3a559c78
      }
  
 diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
-index d210f991366796d84e947df0a057c1adc62824f8..bc9f6cc286536b87513de81855ad0b61cf787c84 100644
+index c4396509584011a5bbc171510478e8e62ce44d94..4ddb5e7ce3529466c3930caa9aa6b18158e9a63d 100644
 --- a/net/minecraft/commands/Commands.java
 +++ b/net/minecraft/commands/Commands.java
 @@ -198,15 +198,15 @@ public class Commands {
@@ -12202,7 +12202,7 @@ index 02bd74f2ed7f34233e3543c8e70ae754adb8aa25..b813fa3997e1000cc905fba2cd4f7c2c
      // Paper end - lag compensation
  }
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a855958bf2beb 100644
+index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d9281340f1a8 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -208,7 +208,7 @@ import org.slf4j.Logger;
@@ -12432,7 +12432,7 @@ index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a8559
              // CraftBukkit end
          } catch (Throwable t) {
              CrashReport report = CrashReport.forThrowable(t, "Ticking player");
-@@ -1482,8 +1641,322 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -1471,8 +1630,322 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          }
      }
  
@@ -12755,7 +12755,7 @@ index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a8559
          if (this.isSleeping()) return null; // CraftBukkit - SPIGOT-3154
          if (this.isRemoved()) {
              return null;
-@@ -2558,7 +3031,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2537,7 +3010,30 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          return this.camera == null ? this : this.camera;
      }
  
@@ -12786,7 +12786,7 @@ index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a8559
          Entity oldCamera = this.getCamera();
          this.camera = newCamera == null ? this : newCamera;
          if (oldCamera != this.camera) {
-@@ -2577,16 +3073,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2556,16 +3052,19 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
                  }
              }
              // Paper end - Add PlayerStartSpectatingEntityEvent and PlayerStopSpectatingEntity
@@ -12813,7 +12813,7 @@ index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a8559
          }
      }
  
-@@ -2933,11 +3432,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -2912,11 +3411,11 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      }
  
      public void registerEnderPearl(final ThrownEnderpearl enderPearl) {
@@ -12827,7 +12827,7 @@ index c063fa617ea79b758b9c4ef0456889a91e341ad4..a17b622d15221e3936252f52868a8559
      }
  
      public Set<ThrownEnderpearl> getEnderPearls() {
-@@ -3132,7 +3631,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -3111,7 +3610,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
          this.experienceLevel = this.newLevel;
          this.totalExperience = this.newTotalExp;
          this.experienceProgress = 0;
@@ -14413,7 +14413,7 @@ index bb5f66c62c9541bb76a9faad9e9ee91c1466fc6a..66d7bb9418832638c220a08d06c01ef0
              return blockToFallLocation(blockState);
          } else {
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c0756986049fbab 100644
+index 0fa6006a7c344f9f12972008e586b4c1f03c470e..e8204e243a3e038041a2e398fcea9c7d383638f9 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -172,7 +172,7 @@ public abstract class Entity
@@ -14608,7 +14608,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
          if (!this.level().paperConfig().scoreboards.allowNonPlayerEntitiesOnScoreboards && !(this instanceof Player)) { return null; } // Paper - Perf: Disable Scoreboards for non players by default
          return this.level().getScoreboard().getPlayersTeam(this.getScoreboardName());
      }
-@@ -4085,7 +4116,787 @@ public abstract class Entity
+@@ -4085,7 +4116,791 @@ public abstract class Entity
          this.portalProcess = oldEntity.portalProcess;
      }
  
@@ -15112,9 +15112,11 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
 +                            portalInfoCompletable.complete(
 +                                new net.minecraft.world.level.portal.TeleportTransition(
 +                                    destination, Vec3.atBottomCenterOf(targetPos.below()), Vec3.ZERO, Direction.WEST.toYRot(), 0.0f,
++                                    false, false,
 +                                    Relative.union(Relative.DELTA, Set.of(Relative.X_ROT)),
 +                                    TeleportTransition.PLAY_PORTAL_SOUND.then(TeleportTransition.PLACE_PORTAL_TICKET),
-+                                    org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_PORTAL
++                                    org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_PORTAL,
++                                    TeleportTransition.PassengerTeleportationMode.POSITION_RIDER
 +                                )
 +                            );
 +                        }
@@ -15132,9 +15134,11 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
 +                            portalInfoCompletable.complete(
 +                                new net.minecraft.world.level.portal.TeleportTransition(
 +                                    destination, Vec3.atBottomCenterOf(adjustedSpawn), Vec3.ZERO, 0.0f, 0.0f,
++                                    false, false,
 +                                    Relative.union(Relative.DELTA, Relative.ROTATION),
 +                                    TeleportTransition.PLAY_PORTAL_SOUND.then(TeleportTransition.PLACE_PORTAL_TICKET),
-+                                    org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_PORTAL
++                                    org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_PORTAL,
++                                    TeleportTransition.PassengerTeleportationMode.POSITION_RIDER
 +                                )
 +                            );
 +                        }
@@ -15396,7 +15400,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
          // Paper start - Fix item duplication and teleport issues
          if ((!this.isAlive() || !this.valid) && (transition.newLevel() != this.level)) {
              LOGGER.warn("Illegal Entity Teleport {} to {}:{}", this, transition.newLevel(), transition.position(), new Throwable());
-@@ -4287,6 +5098,12 @@ public abstract class Entity
+@@ -4294,6 +5109,12 @@ public abstract class Entity
          }
      }
  
@@ -15409,7 +15413,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
      protected void removeAfterChangingDimensions() {
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
          if (this instanceof Leashable leashable && leashable.isLeashed()) { // Paper - only call if it is leashed
-@@ -4620,6 +5437,12 @@ public abstract class Entity
+@@ -4627,6 +5448,12 @@ public abstract class Entity
      }
  
      public void startSeenByPlayer(final ServerPlayer player) {
@@ -15422,7 +15426,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
      }
  
      public void stopSeenByPlayer(final ServerPlayer player) {
-@@ -4629,6 +5452,12 @@ public abstract class Entity
+@@ -4636,6 +5463,12 @@ public abstract class Entity
              new io.papermc.paper.event.player.PlayerUntrackEntityEvent(player.getBukkitEntity(), this.getBukkitEntity()).callEvent();
          }
          // Paper end - entity tracking events
@@ -15435,7 +15439,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
      }
  
      public float rotate(final Rotation rotation) {
-@@ -5038,7 +5867,8 @@ public abstract class Entity
+@@ -5045,7 +5878,8 @@ public abstract class Entity
              return;
          }
          // Paper end - Block invalid positions and bounding box
@@ -15445,7 +15449,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
              synchronized (this.posLock) { // Paper - detailed watchdog information
              this.position = new Vec3(x, y, z);
              } // Paper - detailed watchdog information
-@@ -5071,7 +5901,7 @@ public abstract class Entity
+@@ -5078,7 +5912,7 @@ public abstract class Entity
          }
          // Paper start - Block invalid positions and bounding box; don't allow desync of pos and AABB
          // hanging has its own special logic
@@ -15454,7 +15458,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
              this.setBoundingBox(this.makeBoundingBox());
          }
          // Paper end - Block invalid positions and bounding box
-@@ -5177,6 +6007,12 @@ public abstract class Entity
+@@ -5184,6 +6018,12 @@ public abstract class Entity
          return this.removalReason != null;
      }
  
@@ -15467,7 +15471,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
      public Entity.@Nullable RemovalReason getRemovalReason() {
          return this.removalReason;
      }
-@@ -5191,6 +6027,9 @@ public abstract class Entity
+@@ -5198,6 +6038,9 @@ public abstract class Entity
          // Paper end - rewrite chunk system
          org.bukkit.craftbukkit.event.CraftEventFactory.callEntityRemoveEvent(this, cause); // CraftBukkit
          final boolean alreadyRemoved = this.removalReason != null; // Paper - Folia schedulers
@@ -15477,7 +15481,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -5214,6 +6053,10 @@ public abstract class Entity
+@@ -5221,6 +6064,10 @@ public abstract class Entity
          this.removalReason = null;
      }
  
@@ -15488,7 +15492,7 @@ index 1530810cdb74810e37e3e22ce4fcda4ee7511055..2a8a7aeddffdfed31cd6e1162c075698
      // Paper start - Folia schedulers
      /**
       * Invoked only when the entity is truly removed from the server, never to be added to any world.
-@@ -5225,7 +6068,7 @@ public abstract class Entity
+@@ -5232,7 +6079,7 @@ public abstract class Entity
      // Paper end - Folia schedulers
      // Paper start - optimise Folia entity scheduler
      public final void registerScheduler() {
@@ -16727,7 +16731,7 @@ index b844dee92b175ddef4506d96e513e5ca3d27750d..21c4deda503679ebf91355f289ddeac5
                          if (chicken instanceof Chicken realChicken) {
                              Optional.ofNullable(this.getItem().get(DataComponents.CHICKEN_VARIANT)).ifPresent(realChicken::setVariant);
 diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
-index 50bd8343129b6eafb0d18795aede6e8778e86d83..501a0e89cc7bcfce6793f059b080b38666e0fb64 100644
+index 8d3c6abd387acc4cec27a33b96bcd24255fd01ac..d0dba5cc351903fb762e231a95f302479794185f 100644
 --- a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 +++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
 @@ -54,15 +54,11 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
@@ -17967,39 +17971,40 @@ index a65b487e8c32deb0f931815ca7d8e31ce42a5e67..a40de2fb8ad3030883b7139fbe73c172
          }
          // CraftBukkit end
 diff --git a/net/minecraft/world/level/block/EndGatewayBlock.java b/net/minecraft/world/level/block/EndGatewayBlock.java
-index fd0ec9e5cc92b7022578d15b95bc2ff5168a6a71..8a376b56bb17fc1ac115f9116fa7066746c391e5 100644
+index 67941c19d97a328dfce7eeecf52518349f27df81..c55abf3d1b2770e6972efbb1b38a80596da6345c 100644
 --- a/net/minecraft/world/level/block/EndGatewayBlock.java
 +++ b/net/minecraft/world/level/block/EndGatewayBlock.java
-@@ -115,6 +115,15 @@ public class EndGatewayBlock extends BaseEntityBlock implements Portal {
-             if (teleportPosition == null) {
-                 return null;
-             } else {
-+                return getTeleportTransition(currentLevel, entity, teleportPosition); // Folia - region threading
-+            }
-+        } else {
-+            return null;
-+        }
-+    }
-+
-+    // Folia start - region threading
-+    public static TeleportTransition getTeleportTransition(final ServerLevel currentLevel, final Entity entity, final Vec3 teleportPosition) {
-                 return entity instanceof ThrownEnderpearl
-                     ? new TeleportTransition(currentLevel, teleportPosition, Vec3.ZERO, 0.0F, 0.0F, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) // CraftBukkit
-                     : new TeleportTransition(
-@@ -127,11 +136,28 @@ public class EndGatewayBlock extends BaseEntityBlock implements Portal {
-                         TeleportTransition.PLACE_PORTAL_TICKET,
-                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY // CraftBukkit
-                     );
+@@ -112,26 +112,53 @@ public class EndGatewayBlock extends BaseEntityBlock implements Portal {
+     public @Nullable TeleportTransition getPortalDestination(final ServerLevel currentLevel, final Entity entity, final BlockPos portalEntryPos) {
+         if (currentLevel.getBlockEntity(portalEntryPos) instanceof TheEndGatewayBlockEntity endGatewayBlockEntity) {
+             Vec3 teleportPosition = endGatewayBlockEntity.getPortalPosition(currentLevel, portalEntryPos);
+-            if (teleportPosition == null) {
+-                return null;
+-            } else {
+-                return entity instanceof ThrownEnderpearl
+-                    ? new TeleportTransition(currentLevel, teleportPosition, Vec3.ZERO, 0.0F, 0.0F, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET).withCause(org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) // CraftBukkit
+-                    : new TeleportTransition(
+-                        currentLevel,
+-                        teleportPosition,
+-                        Vec3.ZERO,
+-                        0.0F,
+-                        0.0F,
+-                        Relative.union(Relative.DELTA, Relative.ROTATION),
+-                        TeleportTransition.PLACE_PORTAL_TICKET
+-                    ).withCause(org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY);  // CraftBukkit;
 -            }
--        } else {
--            return null;
-+    }
-+
++            return getTeleportTransition(currentLevel, entity, teleportPosition); // Folia - region threading - move down
+         } else {
+             return null;
+         }
+     }
+ 
++    // Folia start - region threading
 +    @Override
 +    public boolean portalAsync(ServerLevel sourceWorld, Entity portalTarget, BlockPos portalPos) {
 +        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(portalTarget)) {
 +            return false;
-         }
++        }
 +        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(sourceWorld, portalPos)) {
 +            return false;
 +        }
@@ -18013,13 +18018,33 @@ index fd0ec9e5cc92b7022578d15b95bc2ff5168a6a71..8a376b56bb17fc1ac115f9116fa70667
 +        return TheEndGatewayBlockEntity.teleportRegionThreading(
 +            sourceWorld, portalPos, portalTarget, endGateway, TeleportTransition.PLACE_PORTAL_TICKET
 +        );
-     }
++    }
++
++    public static TeleportTransition getTeleportTransition(final ServerLevel currentLevel, final Entity entity, final Vec3 teleportPosition) {
++        // moved from above
++        if (teleportPosition == null) {
++            return null;
++        } else {
++            return entity instanceof ThrownEnderpearl
++                    ? new TeleportTransition(currentLevel, teleportPosition, Vec3.ZERO, 0.0F, 0.0F, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET).withCause(org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) // CraftBukkit
++                    : new TeleportTransition(
++                    currentLevel,
++                    teleportPosition,
++                    Vec3.ZERO,
++                    0.0F,
++                    0.0F,
++                    Relative.union(Relative.DELTA, Relative.ROTATION),
++                    TeleportTransition.PLACE_PORTAL_TICKET
++            ).withCause(org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY);  // CraftBukkit;
++        }
++    }
 +    // Folia end - region threading
- 
++
      @Override
      protected RenderShape getRenderShape(final BlockState state) {
+         return RenderShape.INVISIBLE;
 diff --git a/net/minecraft/world/level/block/EndPortalBlock.java b/net/minecraft/world/level/block/EndPortalBlock.java
-index 66c8f1abf36c9f4598bde83e4375d0f72eac4668..d42bb2a1721e4ab8c9956e18c3ca418b8d648c59 100644
+index 2d48b70e18547330078e49c8f01f2f39b08d274c..123df098fa987030fe3789f36ff95aeee2979834 100644
 --- a/net/minecraft/world/level/block/EndPortalBlock.java
 +++ b/net/minecraft/world/level/block/EndPortalBlock.java
 @@ -72,7 +72,7 @@ public class EndPortalBlock extends BaseEntityBlock implements Portal {
@@ -18031,7 +18056,7 @@ index 66c8f1abf36c9f4598bde83e4375d0f72eac4668..d42bb2a1721e4ab8c9956e18c3ca418b
                  if (level.paperConfig().misc.disableEndCredits) {player.seenCredits = true; return;} // Paper - Option to disable end credits
                  player.showEndCredits();
              } else {
-@@ -131,6 +131,20 @@ public class EndPortalBlock extends BaseEntityBlock implements Portal {
+@@ -137,6 +137,20 @@ public class EndPortalBlock extends BaseEntityBlock implements Portal {
          // CraftBukkit end
      }
  
@@ -18123,7 +18148,7 @@ index 82ab930bf438e988d637786bdde88e34ea073a2f..f8541ea8f5990c4a92ccfec439d49db1
                  return value;
              })
 diff --git a/net/minecraft/world/level/block/NetherPortalBlock.java b/net/minecraft/world/level/block/NetherPortalBlock.java
-index 070880adc13501f8011d81de339a66d474f7948a..b0e83c97263f6a3c5bfeb70a180f3d140ffb4e29 100644
+index 0bc5063f05599f41086f23ba6753e268258add3a..29fc9521c2c8333c999647dd833899393a838064 100644
 --- a/net/minecraft/world/level/block/NetherPortalBlock.java
 +++ b/net/minecraft/world/level/block/NetherPortalBlock.java
 @@ -181,6 +181,33 @@ public class NetherPortalBlock extends Block implements Portal {
