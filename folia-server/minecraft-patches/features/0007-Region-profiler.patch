@@ -860,7 +860,7 @@ index 0c84984fc72ae949c09300306783db23e0ed6cc0..10fa576838c726d026df078eef6c693d
                      if (e instanceof ReportedException re && re.getCause() instanceof OutOfMemoryError) {
                          throw PacketUtils.makeReportedException(e, this.packet, this.listener);
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index e6405162ff9c72b9e440991b8b25fcfcc6ee4593..42f2eff5aa9df82ab0d5baae2353df12bfadcb5f 100644
+index 08fd98fb615365ee48eb94a2515a6dac38db5ed4..76ae704837e09b20abf5e5cc27eca9ea2e41591e 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -1649,6 +1649,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -1136,7 +1136,7 @@ index 7df9021195d2bd191b17c56c8486e475f8b090b5..7927769cf9bccb892745f4d1390eb83b
  
          profiler.pop();
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index b813fa3997e1000cc905fba2cd4f7c2cf24bc8c8..c6434ff2e5c211887c2e98c8462a49e0e1cb5b21 100644
+index 848f4286b1b64f257c8383964b95323d97e4a0de..35ab432bbd59aba80a6eaca1769e6aa82c8a7e46 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -814,6 +814,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
