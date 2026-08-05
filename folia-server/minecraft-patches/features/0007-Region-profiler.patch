@@ -860,7 +860,7 @@ index 0c84984fc72ae949c09300306783db23e0ed6cc0..10fa576838c726d026df078eef6c693d
                      if (e instanceof ReportedException re && re.getCause() instanceof OutOfMemoryError) {
                          throw PacketUtils.makeReportedException(e, this.packet, this.listener);
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index e62669793bdc1b34cfc7b8860eb36f1f86ae5496..c6a4d52f76e10fcc57b2c49b07fbc2ef9bb90822 100644
+index e6405162ff9c72b9e440991b8b25fcfcc6ee4593..42f2eff5aa9df82ab0d5baae2353df12bfadcb5f 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -1649,6 +1649,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -936,8 +936,8 @@ index e62669793bdc1b34cfc7b8860eb36f1f86ae5496..c6a4d52f76e10fcc57b2c49b07fbc2ef
 +        final ca.spottedleaf.leafprofiler.RegionizedProfiler.Handle foliaProfiler = io.papermc.paper.threadedregions.TickRegionScheduler.getProfiler(); // Folia - profiler
          ProfilerFiller profiler = Profiler.get();
          //this.getPlayerList().getPlayers().forEach(playerx -> playerx.connection.suspendFlushing()); // Folia - region threading
-         //this.server.getScheduler().mainThreadHeartbeat(); // CraftBukkit // Folia - region threading
-@@ -1907,7 +1923,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         // Folia start - region threading - implement flush consolidation
+@@ -1913,7 +1929,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              profiler.push("tick");
  
              try {
@@ -947,7 +947,7 @@ index e62669793bdc1b34cfc7b8860eb36f1f86ae5496..c6a4d52f76e10fcc57b2c49b07fbc2ef
              } catch (Throwable t) {
                  CrashReport report = CrashReport.forThrowable(t, "Exception ticking world");
                  level.fillReportDetails(report);
-@@ -1921,7 +1939,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1927,7 +1945,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          //this.isIteratingOverLevels = false; // Paper - Throw exception on world create while being ticked // Folia - region threading
  
          profiler.popPush("connection");
@@ -1270,7 +1270,7 @@ index b813fa3997e1000cc905fba2cd4f7c2cf24bc8c8..c6434ff2e5c211887c2e98c8462a49e0
      }
  
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index abded55cb8b695eb33a1894284a63887547c7a75..e7579a9873362317dd82b63306cf650af9472574 100644
+index c36ca30382eb0013644d7230b5585d5123e21cc7..259eb7574841b1b885093b534440f8a40db4e8e2 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -1033,6 +1033,7 @@ public abstract class PlayerList {

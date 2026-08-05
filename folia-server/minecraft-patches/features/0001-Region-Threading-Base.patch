@@ -2876,10 +2876,10 @@ index 0000000000000000000000000000000000000000..d1a045d47dcd12f246d95ecdfc202da3
 \ No newline at end of file
 diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cb15cfbc684ae9e9d9634886f707c2df10063139
+index 0000000000000000000000000000000000000000..6c4989c26f5e5604e9a23b3b7303ac30da9f0fe3
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
-@@ -0,0 +1,773 @@
+@@ -0,0 +1,793 @@
 +package io.papermc.paper.threadedregions;
 +
 +import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
@@ -3212,7 +3212,8 @@ index 0000000000000000000000000000000000000000..cb15cfbc684ae9e9d9634886f707c2df
 +    private RegionizedServer.WorldLevelData tickData;
 +
 +    // connections
-+    public final List<Connection> connections = new ArrayList<>();
++    private static final Connection[] EMPTY_CONNECTION_ARRAY = new Connection[0];
++    private final ReferenceList<Connection> connections = new ReferenceList<>(EMPTY_CONNECTION_ARRAY);
 +
 +    // misc. fields
 +    private boolean isHandlingTick;
@@ -3380,11 +3381,30 @@ index 0000000000000000000000000000000000000000..cb15cfbc684ae9e9d9634886f707c2df
 +            ChunkHolderManager.MAX_TICKET_LEVEL,
 +            player.connection.disconnectTicketId
 +        );
++        player.connection.resumeFlushing();
++    }
++
++    public boolean hasConnection(final Connection conn) {
++        return this.connections.contains(conn);
++    }
++
++    public void removeConnection(final ServerPlayer player) {
++        final ServerGamePacketListenerImpl gamePacketListener = player.connection;
++        gamePacketListener.resumeFlushing();
++
++        this.connections.remove(gamePacketListener.connection);
++    }
++
++    public void addConnection(final ServerPlayer player) {
++        final ServerGamePacketListenerImpl gamePacketListener = player.connection;
++        gamePacketListener.resumeFlushing();
++
++        this.connections.add(gamePacketListener.connection);
 +    }
 +
 +    // connections
 +    public void tickConnections() {
-+        final List<Connection> connections = new ArrayList<>(this.connections);
++        final List<Connection> connections = new ArrayList<>(Arrays.asList(Arrays.copyOf(this.connections.getRawDataUnchecked(), this.connections.size())));
 +        Collections.shuffle(connections);
 +        for (final Connection conn : connections) {
 +            if (!conn.isConnected()) {
@@ -7912,7 +7932,7 @@ index 144c18c08bf8f03d907b97f968aa171a9fbf997f..be9fdca704391f8d77b87b4d75e67bb6
          }
      }
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f86ae5496 100644
+index 68151ce05e7009f28dda0470c744920cbd5f4a27..e6405162ff9c72b9e440991b8b25fcfcc6ee4593 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -200,7 +200,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -8496,7 +8516,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          int maxPlayers = this.getMaxPlayers();
          if (this.hidesOnlinePlayers()) {
              return new ServerStatus.Players(maxPlayers, players.size(), List.of());
-@@ -1760,29 +1843,32 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1760,29 +1843,38 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          return new ServerStatus.Players(maxPlayers, players.size(), sample);
      }
  
@@ -8510,6 +8530,12 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
 -        this.getPlayerList().getPlayers().forEach(playerx -> playerx.connection.suspendFlushing());
 -        this.server.getScheduler().mainThreadHeartbeat(); // CraftBukkit
 +        //this.getPlayerList().getPlayers().forEach(playerx -> playerx.connection.suspendFlushing()); // Folia - region threading
++        // Folia start - region threading - implement flush consolidation
++        final List<ServerPlayer> suspendedFlushes = new java.util.ArrayList<>(regionizedWorldData.getLocalPlayers());
++        for (ServerPlayer player : suspendedFlushes) {
++            player.connection.suspendFlushing();
++        }
++        // Folia end - region threading - implement flush consolidation
 +        //this.server.getScheduler().mainThreadHeartbeat(); // CraftBukkit // Folia - region threading
          // Paper start - optimise Folia entity scheduler
 -        ((io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler)org.bukkit.Bukkit.getGlobalRegionScheduler()).tick();
@@ -8546,7 +8572,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
              profiler.push("clocks");
              // Paper start - per-world time
              if (io.papermc.paper.configuration.GlobalConfiguration.get().time.affectsAllWorlds) {
-@@ -1796,7 +1882,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1796,7 +1888,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              profiler.pop();
          }
  
@@ -8555,7 +8581,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
              profiler.push("timeSync");
              this.forceGameTimeSynchronization();
              profiler.pop();
-@@ -1804,24 +1890,24 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1804,24 +1896,24 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          // CraftBukkit start
          // Run tasks that are waiting on processing
@@ -8588,7 +8614,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
              } catch (Throwable t) {
                  CrashReport report = CrashReport.forThrowable(t, "Exception ticking world");
                  level.fillReportDetails(report);
-@@ -1830,14 +1916,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1830,14 +1922,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              profiler.pop();
              profiler.pop();
@@ -8607,7 +8633,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          profiler.popPush("debugSubscribers");
          this.debugSubscribers.tick();
          if (this.tickRateManager.runsNormally()) {
-@@ -1847,13 +1933,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1847,13 +1939,21 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          profiler.popPush("server gui refresh");
  
@@ -8619,11 +8645,19 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          profiler.popPush("send chunks");
  
 -        for (ServerPlayer player : this.playerList.getPlayers()) {
++        // Folia start - region threading - implement flush consolidation
++        for (ServerPlayer player : suspendedFlushes) {
++            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(player)) {
++                continue;
++            }
++            player.connection.resumeFlushing();
++        }
++        // Folia end - region threading - implement flush consolidation
 +        if (false) for (ServerPlayer player : this.playerList.getPlayers()) { // Folia - region threading
              player.connection.chunkSender.sendNextChunks(player);
              player.connection.resumeFlushing();
          }
-@@ -1878,11 +1964,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1878,11 +1978,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      public void forceGameTimeSynchronization() {
          ProfilerFiller profiler = Profiler.get();
          profiler.push("timeSync");
@@ -8643,7 +8677,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          profiler.pop();
      }
  
-@@ -2159,11 +2249,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2159,11 +2263,13 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          int count = 0;
  
          for (ServerPlayer player : this.getPlayerList().getPlayers()) {
@@ -8659,7 +8693,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
              count++;
              // Paper end - Expand PlayerGameModeChangeEvent
          }
-@@ -2188,7 +2280,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2188,7 +2294,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public int getTickCount() {
@@ -8668,7 +8702,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
      }
  
      public boolean isUnderSpawnProtection(final ServerLevel level, final BlockPos pos, final Player player) {
-@@ -2224,6 +2316,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2224,6 +2330,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void invalidateStatus() {
@@ -8684,7 +8718,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          this.lastServerStatus = 0L;
      }
  
-@@ -2238,6 +2339,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2238,6 +2353,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void executeIfPossible(final Runnable command) {
@@ -8692,7 +8726,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
          if (this.isStopped()) {
              throw new io.papermc.paper.util.ServerStopRejectedExecutionException("Server already shutting down"); // Paper - do not prematurely disconnect players on stop
          }
-@@ -2609,7 +2711,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2609,7 +2725,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public long getAverageTickTimeNanos() {
@@ -8706,7 +8740,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
      }
  
      public long[] getTickTimesNanos() {
-@@ -2852,13 +2959,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -2852,13 +2973,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public ProfileResults stopTimeProfiler() {
@@ -8721,7 +8755,7 @@ index 68151ce05e7009f28dda0470c744920cbd5f4a27..e62669793bdc1b34cfc7b8860eb36f1f
      }
  
      public int getMaxChainedNeighborUpdates() {
-@@ -3165,24 +3266,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -3165,24 +3280,15 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      // Paper start - API to check if the server is sleeping
      public boolean isTickPaused() {
@@ -12202,7 +12236,7 @@ index 02bd74f2ed7f34233e3543c8e70ae754adb8aa25..b813fa3997e1000cc905fba2cd4f7c2c
      // Paper end - lag compensation
  }
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d9281340f1a8 100644
+index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..a96011a9cf68077998f05f251cecdfded488f71d 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -208,7 +208,7 @@ import org.slf4j.Logger;
@@ -12491,7 +12525,7 @@ index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d928
 +            ServerPlayer.this.reset();
 +        }
 +        // must be manually removed from connections, delay until after reset() so that we do not trip any thread checks
-+        this.level().getCurrentWorldData().connections.remove(this.connection.connection);
++        this.level().getCurrentWorldData().removeConnection(this);
 +
 +        ca.spottedleaf.concurrentutil.completable.CallbackCompletable<org.bukkit.Location> spawnPosComplete =
 +            new ca.spottedleaf.concurrentutil.completable.CallbackCompletable<>();
@@ -12603,7 +12637,7 @@ index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d928
 +    @Override
 +    protected ServerPlayer transformForAsyncTeleport(ServerLevel destination, Vec3 pos, Float yaw, Float pitch, Vec3 velocity) {
 +        // must be manually removed from connections
-+        this.level().getCurrentWorldData().connections.remove(this.connection.connection);
++        this.level().getCurrentWorldData().removeConnection(this);
 +        this.level().removePlayerImmediately(this, Entity.RemovalReason.CHANGED_DIMENSION);
 +
 +        this.setServerLevel(destination);
@@ -12625,7 +12659,7 @@ index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d928
 +            destination.addDuringTeleport(this);
 +
 +            // must be manually added to connections
-+            this.level().getCurrentWorldData().connections.add(this.connection.connection);
++            this.level().getCurrentWorldData().addConnection(this);
 +
 +            // required to set up the pending teleport stuff to the client, and to actually update
 +            // the player's position clientside
@@ -12678,7 +12712,7 @@ index 3cd4e850f223100b61ac6831a87dd38f3a3bb58f..ab2b55775fa7079dbf7bc32a4bc2d928
 +            destination.addDuringTeleport(this);
 +
 +            // must be manually added to connections
-+            this.level().getCurrentWorldData().connections.add(this.connection.connection);
++            this.level().getCurrentWorldData().addConnection(this);
 +
 +            // required to set up the pending teleport stuff to the client, and to actually update
 +            // the player's position clientside
@@ -13050,7 +13084,7 @@ index e84e243f35b09691d03e9a9cf3de0c093b1d5cfb..b0e1153d74e6b17b807670667c9bae6b
              }
              // Spigot end
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index f936da2a1ffef5fd84d8d63be3575fd06ac9a7b2..829f304d62c88f215b9d04b662ab79182f034672 100644
+index f936da2a1ffef5fd84d8d63be3575fd06ac9a7b2..ac7e71dc86e6adf0d2383ea290f955da5d062466 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -301,10 +301,10 @@ public class ServerGamePacketListenerImpl
@@ -13348,7 +13382,7 @@ index f936da2a1ffef5fd84d8d63be3575fd06ac9a7b2..829f304d62c88f215b9d04b662ab7918
          this.removePlayerFromWorld();
 +        } finally { // Folia start - rewrite login process - move connection ownership to global region
 +            io.papermc.paper.threadedregions.RegionizedWorldData worldData = this.player.level().getCurrentWorldData();
-+            worldData.connections.remove(this.connection);
++            worldData.removeConnection(this.player);
 +            // once waitingForSwitchToConfig is set, the global tick thread will own the connection
 +        } // Folia end - rewrite login process - move connection ownership to global region
 +        this.waitingForSwitchToConfig = true; // Folia - rewrite login process - fix bad ordering of this field write - moved down
@@ -13689,7 +13723,7 @@ index e38acabda1d2e49d88b94d46cc51f6602870d6b6..b1b7bfa011bd4b97896cac51cb36e3f4
              parsedDate = defaultValue;
          }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index baec5d072b8f2d9379dba850b04e881e5267ca6b..70e1b8b84b90a5ae3d3cf3549dffa87cc4b442ac 100644
+index baec5d072b8f2d9379dba850b04e881e5267ca6b..9bbb78ccc6c64930b6c52a3cbc73eb9d81167464 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -111,10 +111,10 @@ public abstract class PlayerList {
@@ -13772,7 +13806,7 @@ index baec5d072b8f2d9379dba850b04e881e5267ca6b..70e1b8b84b90a5ae3d3cf3549dffa87c
          ServerGamePacketListenerImpl playerConnection = new ServerGamePacketListenerImpl(this.server, connection, player, cookie);
 +        // Folia start - rewrite login process
 +        // only after setting the connection listener to game type, add the connection to this regions list
-+        level.getCurrentWorldData().connections.add(connection);
++        level.getCurrentWorldData().addConnection(player);
 +        // Folia end - rewrite login process
          connection.setupInboundProtocol(
              GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(this.server.registryAccess()), playerConnection), playerConnection

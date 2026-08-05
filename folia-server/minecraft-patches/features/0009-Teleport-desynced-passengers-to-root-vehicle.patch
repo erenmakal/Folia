@@ -18,7 +18,7 @@ index 20a0f56dc213509b0cef89e2d4669ec18a81a36f..a000e8a944ce1c4648e783d45dbd121a
 +    public static final int PASSENGER_DESYNC_CHECK = GLOBAL_REGISTRY.createType(ProfileType.TIMER, "Check Passenger Desync"); // Folia - fix passenger desync
  }
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index c6a4d52f76e10fcc57b2c49b07fbc2ef9bb90822..6f13870a1b463049dd37cf1c65d0bdecfc35b5c4 100644
+index 42f2eff5aa9df82ab0d5baae2353df12bfadcb5f..422df3df4e681538f1042ccfad918848462142ce 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -1726,6 +1726,16 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa

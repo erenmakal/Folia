@@ -6,7 +6,7 @@ Subject: [PATCH] Do not allow out of region teleport accept
 This may occur when passenger desync happens.
 
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 829f304d62c88f215b9d04b662ab79182f034672..c1faaf7d514c23d756aa626fa93aabd8bb503463 100644
+index ac7e71dc86e6adf0d2383ea290f955da5d062466..de8a73f8aba0f1942e739a9d25f071e36d003c74 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -811,6 +811,19 @@ public class ServerGamePacketListenerImpl
