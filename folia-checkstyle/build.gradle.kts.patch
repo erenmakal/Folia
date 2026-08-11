@@ -1,6 +1,6 @@
 --- a/paper-checkstyle/build.gradle.kts
 +++ b/paper-checkstyle/build.gradle.kts
-@@ -5,6 +_,19 @@
+@@ -5,6 +_,23 @@
  
  val testData = sourceSets.create("testData")
  

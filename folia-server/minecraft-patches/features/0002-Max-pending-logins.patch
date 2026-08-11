@@ -6,7 +6,7 @@ Subject: [PATCH] Max pending logins
 Should help the floodgates on launch
 
 diff --git a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index c0f925b4491fa213ba5872c7ff7c4c460f91542b..64a4f300a90834ee88b0a02e4cffa748699901e6 100644
+index 2b641c9180a5890af8fed8bcc8e8ad23d6680c17..95787d6d29ddb8dca78506bb2a115fa612fdaa29 100644
 --- a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 @@ -98,7 +98,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,

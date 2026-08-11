@@ -7500,7 +7500,7 @@ index 90fa64310ec08604420d755bbdf7dc5a0191680a..18315162fdfe086425c708ac0ef4cd3f
          if (!this.haveTestsStarted()) {
              this.startTests(level);
 diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
-index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b2c3d324f 100644
+index 9fbc7e93712672dbab67f931e2aee447d803607b..c3922310ef1fce26eca60793b75bcb480683778a 100644
 --- a/net/minecraft/network/Connection.java
 +++ b/net/minecraft/network/Connection.java
 @@ -65,7 +65,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
@@ -7594,7 +7594,16 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
          }
      }
  
-@@ -507,10 +544,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -456,7 +493,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+             return;
+         }
+ 
+-        if (connected && this.pendingActions.isEmpty()) {
++        if (false && connected && this.pendingActions.isEmpty()) { // Folia - region threading - connection fixes
+             this.channel.eventLoop().execute(task);
+         } else {
+             this.pendingActions.add(new WrappedConsumer(connection -> connection.channel.eventLoop().execute(task)));
+@@ -524,10 +561,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      }
  
      public void flushChannel() {
@@ -7607,7 +7616,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
          }
      }
  
-@@ -524,53 +562,61 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -541,53 +579,61 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
  
      // Paper start - Optimize network: Rewrite this to be safer if ran off main thread
      private boolean flushQueue() {
@@ -7658,9 +7667,9 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
 -                return true;
 -            }
 +        while (this.canWritePackets()) {
-+            final boolean set = this.flushingQueue.getAndSet(true);
++            final boolean set = false == this.flushingQueue.get() && false == this.flushingQueue.compareAndExchange(false, true);
 +            try {
-+                if (set) {
++                if (!set) {
 +                    // we didn't acquire the lock, break
 +                    return false;
 +                }
@@ -7692,7 +7701,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
 -            if (queued.tryMarkConsumed()) {
 -                queued.accept(this);
 +            } finally {
-+                if (!set) {
++                if (set) {
 +                    this.flushingQueue.set(false);
 +                }
              }
@@ -7703,7 +7712,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
      }
      // Paper end - Optimize network
  
-@@ -579,17 +625,43 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -596,17 +642,43 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      private static int currTick; // Paper - Buffer joins to world
      public void tick() {
          this.flushQueue();
@@ -7755,7 +7764,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
              // Paper start - detailed watchdog information
              net.minecraft.network.PacketProcessor.packetProcessing.push(this.packetListener);
              try {
-@@ -600,7 +672,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -617,7 +689,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
              } // Paper end - Buffer joins to world
          }
  
@@ -7764,7 +7773,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
              this.handleDisconnection();
          }
  
-@@ -651,6 +723,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -668,6 +740,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
              this.channel.close().awaitUninterruptibly();
              this.disconnectionDetails = details;
          }
@@ -7772,7 +7781,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
      }
  
      public boolean isMemoryConnection() {
-@@ -846,10 +919,10 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -863,10 +936,10 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
  
      public void handleDisconnection() {
          if (this.channel != null && !this.channel.isOpen()) {
@@ -7785,7 +7794,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
                  PacketListener packetListener = this.getPacketListener();
                  PacketListener disconnectListener = packetListener != null ? packetListener : this.disconnectListener;
                  if (disconnectListener != null) {
-@@ -878,6 +951,21 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -895,6 +968,21 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
                      }
                  }
                  // Paper end - Add PlayerConnectionCloseEvent
@@ -7807,7 +7816,7 @@ index 9a04309584a5b9b55d0d383619113835190ad8f9..9685deaa401305d355c1c16c19abeb7b
              }
          }
      }
-@@ -905,15 +993,25 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -922,15 +1010,25 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      // Paper start - Optimize network
      public void clearPacketQueue() {
          final net.minecraft.server.level.ServerPlayer player = getPlayer();
@@ -13494,7 +13503,7 @@ index c2aba28916da7f8b0bc8a325cddaa9bb7ecfb251..e3874b0d0ed22f32d70c6fa3dd1c2c25
  
      public final boolean isDisconnected() {
 diff --git a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
-index b94e01aa54b932b29370d1742b00ed73254fe4dc..c0f925b4491fa213ba5872c7ff7c4c460f91542b 100644
+index 1d892a8c905496af9d56cec86941e82ec48505db..2b641c9180a5890af8fed8bcc8e8ad23d6680c17 100644
 --- a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
 @@ -92,7 +92,13 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
@@ -13520,7 +13529,7 @@ index b94e01aa54b932b29370d1742b00ed73254fe4dc..c0f925b4491fa213ba5872c7ff7c4c46
          if (error != null) {
              this.disconnectAsync(error); // Paper
          } else if (this.connection.getIntendedProfileId() != null && !profile.id().equals(this.connection.getIntendedProfileId())) {
-@@ -228,7 +234,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+@@ -230,7 +236,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
                  // Paper end - Keep compression packet write and setup in the same Netty task
              }
  
@@ -13529,7 +13538,7 @@ index b94e01aa54b932b29370d1742b00ed73254fe4dc..c0f925b4491fa213ba5872c7ff7c4c46
              if (waitForDisconnection) {
                  this.state = ServerLoginPacketListenerImpl.State.WAITING_FOR_DUPE_DISCONNECT;
              } else {
-@@ -342,7 +348,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+@@ -344,7 +350,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
          uniqueId = gameprofile.id();
          // Paper end - Add more fields to AsyncPlayerPreLoginEvent
  
