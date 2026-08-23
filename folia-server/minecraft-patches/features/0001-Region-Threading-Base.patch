@@ -852,7 +852,7 @@ index 9a9a599ef178f851ee5c783631a724013a693586..fdb0bcdca1cd38f55f191d42e422c354
                  try {
                      consumer.accept(chunk);
 diff --git a/ca/spottedleaf/moonrise/patches/collisions/CollisionUtil.java b/ca/spottedleaf/moonrise/patches/collisions/CollisionUtil.java
-index 15568f598b8c61cf92563b6a7f8cae526b84484e..8d2518600ad518999b75124f0a87db9efe541f2e 100644
+index 54b2492c3ab6bf9ff52cec53dc4635f725f9eb4f..bc91b87da9c8034fc142007bfb0be4927bd958d6 100644
 --- a/ca/spottedleaf/moonrise/patches/collisions/CollisionUtil.java
 +++ b/ca/spottedleaf/moonrise/patches/collisions/CollisionUtil.java
 @@ -1940,6 +1940,17 @@ public final class CollisionUtil {
