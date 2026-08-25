@@ -30,7 +30,7 @@ index fff7a796a61542213bdaa417d44e25cd05f7e774..69770538f68fb2aa3abc181993ac8ff1
          }
      }
 diff --git a/ca/spottedleaf/moonrise/paper/PaperHooks.java b/ca/spottedleaf/moonrise/paper/PaperHooks.java
-index 277bc96efefed4525864f6afb2294d677ff038c7..08e3c75672e95248140eb0e0907cae5fbe54da34 100644
+index c34b3c1c0e4fe6503a5702e544a192d2bb11d263..d78c1e7678b2ceae5cafedbf784c6f3fe70bd24d 100644
 --- a/ca/spottedleaf/moonrise/paper/PaperHooks.java
 +++ b/ca/spottedleaf/moonrise/paper/PaperHooks.java
 @@ -108,7 +108,7 @@ public final class PaperHooks extends BaseChunkSystemHooks implements PlatformHo
