@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Tue, 11 Aug 2026 14:18:46 -0700
+Subject: [PATCH] Fix delayed leash info crossing region ownership
+
+Adapted from PaperMC/Folia PR #495. Delayed leash data can resolve to an entity
+or knot position that is now owned by another region; do not dereference or
+create that target from the wrong region.
+
+
+diff --git a/net/minecraft/world/entity/Leashable.java b/net/minecraft/world/entity/Leashable.java
+--- a/net/minecraft/world/entity/Leashable.java
++++ b/net/minecraft/world/entity/Leashable.java
+@@ -94,11 +94,15 @@ public interface Leashable {
+             Optional<BlockPos> pos = leashData.delayedLeashInfo.right();
+             if (leashUuid.isPresent()) {
+                 Entity leasher = serverLevel.getEntity(leashUuid.get());
+-                if (leasher != null) {
++                if (leasher != null && (!dev.eren.folia.config.FoliaConfig.fixDelayedLeashOwnership
++                    || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(leasher))) {
+                     setLeashedTo(entity, leasher, true);
+                     return;
+                 }
+-            } else if (pos.isPresent()) {
++            } else if (pos.isPresent() && (!dev.eren.folia.config.FoliaConfig.fixDelayedLeashOwnership
++                || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, pos.get()))) {
+                 setLeashedTo(entity, LeashFenceKnotEntity.getOrCreateKnot(serverLevel, pos.get()), true);
+                 return;
+             }
