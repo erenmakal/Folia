@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:30:00 +0300
+Subject: [PATCH] Add region-safe respawn event compatibility bridge
+
+Upstream Folia cannot fire Paper's legacy PlayerRespawnEvent at the original
+pre-placement point because the destination region is not owned there. Track
+respawn metadata through Folia's async placement and invoke the fork bridge
+only after the player has been installed into the destination region.
+
+The compatibility bridge applies event location changes through teleportAsync
+and follows with PlayerPostRespawnEvent at the final owned location.
+
+
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -1674,6 +1674,8 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+         ca.spottedleaf.concurrentutil.completable.CallbackCompletable<org.bukkit.Location> spawnPosComplete =
+             new ca.spottedleaf.concurrentutil.completable.CallbackCompletable<>();
+         boolean[] usedRespawnAnchor = new boolean[1];
++        boolean[] usedBed = new boolean[1];
++        boolean[] missingRespawnBlock = new boolean[1];
+ 
+         // set up post spawn location logic
+         spawnPosComplete.addWaiter((spawnLoc, throwable) -> {
+@@ -1704,6 +1706,13 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+                         );
+                     }
+                     ServerPlayer.this.connection.restartClientLoadTimerAfterRespawn();
++                    dev.eren.folia.compat.RespawnEventBridge.fire(
++                        ServerPlayer.this,
++                        reason,
++                        usedBed[0],
++                        usedRespawnAnchor[0],
++                        missingRespawnBlock[0]
++                    );
+                     // now the respawn logic is complete
+ 
+                     // last, call the function callback
+@@ -1730,6 +1739,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+                         respawnWorld, respawnConfig, !alive
+                     ).orElse(null);
+                     if (spawnPos == null) {
++                        missingRespawnBlock[0] = true;
+                         // no spawn
+                         ServerPlayer.this.connection.send(
+                             new ClientboundGameEventPacket(ClientboundGameEventPacket.NO_RESPAWN_BLOCK_AVAILABLE, 0.0F)
+@@ -1745,7 +1755,8 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+ 
+                     boolean isRespawnAnchor = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.world.level.block.Blocks.RESPAWN_ANCHOR);
+                     boolean isBed = respawnWorld.getBlockState(respawnConfig.respawnData.pos()).is(net.minecraft.tags.BlockTags.BEDS);
+-                    usedRespawnAnchor[0] = !alive && isRespawnAnchor;
++                    usedRespawnAnchor[0] = !alive && isRespawnAnchor;
++                    usedBed[0] = !alive && isBed;
+ 
+                     // finished now, pass the location on
+                     spawnPosComplete.complete(
