@@ -24,6 +24,7 @@ public final class FoliaConfig {
     public static boolean alternativeKeepAlive = false;
     public static boolean reconcileRejectedEntityInteractions = true;
     public static boolean precomputeVarLongSizes = true;
+    public static boolean asyncSwitchConnectionState = false;
 
     // Existing performance options
     public static boolean preventEndermanTeleportChunkLoads = true;
@@ -82,6 +83,10 @@ public final class FoliaConfig {
         add(config, "networking.precompute-varlong-sizes", true,
             "Use a precomputed VarLong byte-size table on packet encoding hot paths.",
             "Stateless Velocity/Gale/Leaf-style optimization; safe to leave enabled.");
+        add(config, "networking.async-switch-connection-state", false,
+            "Do not synchronously wait on the tick thread for Netty protocol pipeline state changes.",
+            "Leaf 26.2-style mitigation for configuration/login state waits discussed in Folia #454.",
+            "Disabled by default until tested with the actual proxy, ViaVersion/ProtocolLib/PacketEvents and client mix.");
 
         add(config, "performance.entity-ai.prevent-enderman-teleport-chunk-loads", true,
             "Do not load a chunk only because an Enderman is testing a teleport destination.",
@@ -147,6 +152,7 @@ public final class FoliaConfig {
         alternativeKeepAlive = config.getBoolean("networking.alternative-keepalive", false);
         reconcileRejectedEntityInteractions = config.getBoolean("networking.reconcile-rejected-entity-interactions", true);
         precomputeVarLongSizes = config.getBoolean("networking.precompute-varlong-sizes", true);
+        asyncSwitchConnectionState = config.getBoolean("networking.async-switch-connection-state", false);
         preventEndermanTeleportChunkLoads = config.getBoolean("performance.entity-ai.prevent-enderman-teleport-chunk-loads", true);
         earlyTargetRangeCheck = config.getBoolean("performance.entity-ai.early-target-range-check", true);
         useBuiltInBlockRegistryForRandomTicks = config.getBoolean("performance.random-tick.use-built-in-block-registry", true);
@@ -191,9 +197,10 @@ public final class FoliaConfig {
         }
 
         LOGGER.info(
-            "Loaded folia.yml v{} (alt-keepalive={}, interaction-resync={}, varlong-fastpath={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
+            "Loaded folia.yml v{} (alt-keepalive={}, async-state-switch={}, interaction-resync={}, varlong-fastpath={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
             CURRENT_VERSION,
             alternativeKeepAlive,
+            asyncSwitchConnectionState,
             reconcileRejectedEntityInteractions,
             precomputeVarLongSizes,
             disableVanillaDebugSubscribers,
