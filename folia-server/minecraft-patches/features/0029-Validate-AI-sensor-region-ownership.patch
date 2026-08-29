@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PluginsKers <ikers@foxmail.com>
+Date: Sun, 9 Aug 2026 17:34:46 +0800
+Subject: [PATCH] Validate region ownership for AI sensor targets
+
+Adapted from PaperMC/Folia PR #491. Sensor memories retain direct entity
+references between scans, but entity region ownership can change before those
+references are consumed. Validate ownership before state/visibility reads and
+before accepting plugin-replaced follow targets.
+
+
+diff --git a/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java b/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
+--- a/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
++++ b/net/minecraft/world/entity/ai/behavior/BabyFollowAdult.java
+@@ -27,6 +27,12 @@ public class BabyFollowAdult {
+                             return false;
+                         } else {
+                             LivingEntity adult = i.get(nearestAdult);
++                            if (dev.eren.folia.config.FoliaConfig.aiSensorOwnershipChecks
++                                && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(adult)) {
++                                nearestAdult.erase();
++                                return false;
++                            }
+                             if (body.closerThan(adult, followRange.maxInclusive() + 1) && !body.closerThan(adult, followRange.minInclusive())) {
+                                 // CraftBukkit start
+                                 org.bukkit.event.entity.EntityTargetLivingEntityEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callEntityTargetLivingEvent(body, adult, org.bukkit.event.entity.EntityTargetEvent.TargetReason.FOLLOW_LEADER);
+@@ -37,6 +43,11 @@ public class BabyFollowAdult {
+                                     walkTarget.erase();
+                                     return true;
+                                 }
++                                if (dev.eren.folia.config.FoliaConfig.aiSensorOwnershipChecks
++                                    && !org.bukkit.Bukkit.isOwnedByCurrentRegion(event.getTarget())) {
++                                    return false;
++                                }
+                                 adult = ((org.bukkit.craftbukkit.entity.CraftLivingEntity) event.getTarget()).getHandle();
+                                 // CraftBukkit end
+                                 WalkTarget target = new WalkTarget(
+diff --git a/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java b/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
+--- a/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
++++ b/net/minecraft/world/entity/ai/memory/NearestVisibleLivingEntities.java
+@@ -32,6 +32,15 @@ public class NearestVisibleLivingEntities {
+         return EMPTY;
+     }
+ 
++    private boolean folia$isMatchingAndVisible(final LivingEntity entity, final Predicate<LivingEntity> filter) {
++        return (!dev.eren.folia.config.FoliaConfig.aiSensorOwnershipChecks
++                || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(entity))
++            && filter.test(entity)
++            && this.lineOfSightTest.test(entity);
++    }
++
+     @VisibleForDebug
+     public List<LivingEntity> nearbyEntities() {
+         return this.nearbyEntities;
+@@ -39,7 +48,7 @@ public class NearestVisibleLivingEntities {
+ 
+     public Optional<LivingEntity> findClosest(final Predicate<LivingEntity> filter) {
+         for (LivingEntity nearbyEntity : this.nearbyEntities) {
+-            if (filter.test(nearbyEntity) && this.lineOfSightTest.test(nearbyEntity)) {
++            if (this.folia$isMatchingAndVisible(nearbyEntity, filter)) {
+                 return Optional.of(nearbyEntity);
+             }
+         }
+@@ -48,20 +57,24 @@ public class NearestVisibleLivingEntities {
+     }
+ 
+     public Iterable<LivingEntity> findAll(final Predicate<LivingEntity> filter) {
+-        return Iterables.filter(this.nearbyEntities, entity -> filter.test(entity) && this.lineOfSightTest.test(entity));
++        return Iterables.filter(this.nearbyEntities, entity -> this.folia$isMatchingAndVisible(entity, filter));
+     }
+ 
+     public Stream<LivingEntity> find(final Predicate<LivingEntity> filter) {
+-        return this.nearbyEntities.stream().filter(entity -> filter.test(entity) && this.lineOfSightTest.test(entity));
++        return this.nearbyEntities.stream().filter(entity -> this.folia$isMatchingAndVisible(entity, filter));
+     }
+ 
+     public boolean contains(final LivingEntity targetEntity) {
+-        return this.nearbyEntities.contains(targetEntity) && this.lineOfSightTest.test(targetEntity);
++        return (!dev.eren.folia.config.FoliaConfig.aiSensorOwnershipChecks
++                || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(targetEntity))
++            && this.nearbyEntities.contains(targetEntity)
++            && this.lineOfSightTest.test(targetEntity);
+     }
+ 
+     public boolean contains(final Predicate<LivingEntity> filter) {
+         for (LivingEntity nearbyEntity : this.nearbyEntities) {
+-            if (filter.test(nearbyEntity) && this.lineOfSightTest.test(nearbyEntity)) {
++            if (this.folia$isMatchingAndVisible(nearbyEntity, filter)) {
+                 return true;
+             }
+         }
+diff --git a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java b/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
+--- a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
++++ b/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
+@@ -17,7 +17,11 @@ public class NearestLivingEntitySensor<T extends LivingEntity> extends Sensor<T>
+     protected void doTick(final ServerLevel level, final T body) {
+         double followRange = body.getAttributeValue(Attributes.FOLLOW_RANGE);
+         AABB boundingBox = body.getBoundingBox().inflate(followRange, followRange, followRange);
+-        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
++        List<LivingEntity> livingEntities = level.getEntitiesOfClass(
++            LivingEntity.class, boundingBox,
++            mob -> mob != body
++                && (!dev.eren.folia.config.FoliaConfig.aiSensorOwnershipChecks || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(mob))
++                && mob.isAlive());
+         livingEntities.sort(Comparator.comparingDouble(body::distanceToSqr));
+         Brain<?> brain = body.getBrain();
+         brain.setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, livingEntities);
