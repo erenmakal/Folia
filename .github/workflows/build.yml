@@ -16,6 +16,11 @@ jobs:
       - name: Checkout Git Repository
         uses: actions/checkout@v6
 
+      - name: Validate Linux scripts
+        run: |
+          bash -n scripts/linux/start-folia.sh
+          bash -n scripts/linux/install-tuning.sh
+
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
