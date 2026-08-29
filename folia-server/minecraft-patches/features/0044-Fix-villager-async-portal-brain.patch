@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:40:00 +0300
+Subject: [PATCH] Fix villager brain initialization during async portal teleport
+
+Adapted from PaperMC/Folia PR #446 / issue #431. Villager construction and
+NBT restoration can rebuild the brain while an async portal copy is still in a
+temporary source/destination world transition. Defer the schedule-dependent
+brain initialization until the copied villager is fully installed in the
+intended destination world.
+
+The behavior is gated by fixes.region-safety.villager-async-portal-brain in
+folia.yml.
+
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -227,6 +227,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+     public static final String TAG_INVULNERABLE = "Invulnerable";
+     public static final String TAG_CUSTOM_NAME = "CustomName";
+     private static final AtomicInteger ENTITY_COUNTER = new AtomicInteger();
++    private static final ThreadLocal<ServerLevel> FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT = new ThreadLocal<>();
+     public static final int CONTENTS_SLOT_INDEX = 0;
+     public static final int BOARDING_COOLDOWN = 60;
+     public static final int TOTAL_AIR_SUPPLY = 300;
+@@ -4343,8 +4344,24 @@ public abstract class Entity
+     protected Entity transformForAsyncTeleport(ServerLevel destination, Vec3 pos, Float yaw, Float pitch, Vec3 velocity) {
+         this.removeAfterChangingDimensions(); // remove before so that any CBEntity#getHandle call affects this entity before copying
+ 
+-        Entity copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
+-        copy.restoreFrom(this);
++        final ServerLevel folia$previousDestination = FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT.get();
++        final Entity copy;
++        if (dev.eren.folia.config.FoliaConfig.fixVillagerAsyncPortalBrain) {
++            FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT.set(destination);
++        }
++        try {
++            copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
++            copy.restoreFrom(this);
++        } finally {
++            if (dev.eren.folia.config.FoliaConfig.fixVillagerAsyncPortalBrain) {
++                if (folia$previousDestination == null) {
++                    FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT.remove();
++                } else {
++                    FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT.set(folia$previousDestination);
++                }
++            }
++        }
+         copy.transform(pos, yaw, pitch, velocity);
+         // vanilla code used to call remove _after_ copying, and some stuff is required to be after copy - so add hook here
+         // for example, clearing of inventory after switching dimensions
+@@ -4354,6 +4371,10 @@ public abstract class Entity
+         return copy;
+     }
+ 
++    protected static @Nullable ServerLevel folia$getAsyncTeleportDestinationContext() {
++        return dev.eren.folia.config.FoliaConfig.fixVillagerAsyncPortalBrain ? FOLIA_ASYNC_TELEPORT_DESTINATION_CONTEXT.get() : null;
++    }
++
+     public final boolean teleportAsync(TeleportTransition teleportTarget, long teleportFlags,
+                                        java.util.function.Consumer<Entity> teleportComplete) {
+         PositionMoveRotation move = PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(this), PositionMoveRotation.of(teleportTarget), teleportTarget.relatives());
+diff --git a/net/minecraft/world/entity/npc/villager/Villager.java b/net/minecraft/world/entity/npc/villager/Villager.java
+--- a/net/minecraft/world/entity/npc/villager/Villager.java
++++ b/net/minecraft/world/entity/npc/villager/Villager.java
+@@ -126,6 +126,7 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+     public int numberOfRestocksToday = 0;
+     private long lastRestockCheckDay;
+     private boolean assignProfessionWhenSpawned = false;
++    private @Nullable ServerLevel folia$deferredBrainInitializationWorld;
+     private static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
+         MemoryModuleType.HOME,
+         MemoryModuleType.JOB_SITE,
+@@ -209,6 +210,10 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+ 
+     @Override
+     protected Brain<?> makeBrain(Dynamic<?> dynamic) {
++        final ServerLevel folia$destination = folia$getAsyncTeleportDestinationContext();
++        if (folia$destination != null) {
++            this.folia$deferredBrainInitializationWorld = folia$destination;
++        }
+         Brain<Villager> brain = this.brainProvider().makeBrain(dynamic);
+         this.registerBrainGoals(brain);
+         return brain;
+@@ -221,6 +226,25 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         this.registerBrainGoals(this.getBrain());
+     }
+ 
++    private void folia$updateBrainActivityFromSchedule(final ServerLevel level, final Brain<Villager> villagerBrain) {
++        villagerBrain.updateActivityFromSchedule(level.environmentAttributes(), level.getLevelData().getGameTime(), this.position());
++    }
++
++    private boolean folia$tryCompleteDeferredBrainInitialization(final ServerLevel level) {
++        final ServerLevel folia$destination = this.folia$deferredBrainInitializationWorld;
++        if (folia$destination == null) {
++            return true;
++        }
++        if (level != this.level() || level != folia$destination || !this.inWorld || !this.valid) {
++            return false;
++        }
++
++        this.folia$updateBrainActivityFromSchedule(level, this.getBrain());
++        this.folia$deferredBrainInitializationWorld = null;
++        return true;
++    }
++
+     private void registerBrainGoals(Brain<Villager> villagerBrain) {
+         Holder<VillagerProfession> holder = this.getVillagerData().profession();
+         if (this.isBaby()) {
+@@ -250,7 +274,9 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         villagerBrain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+         villagerBrain.setDefaultActivity(Activity.IDLE);
+         villagerBrain.setActiveActivityIfPossible(Activity.IDLE);
+-        villagerBrain.updateActivityFromSchedule(this.level().environmentAttributes(), this.level().getLevelData().getGameTime(), this.position()); // Folia - region threading - not in the world yet
++        if (this.folia$deferredBrainInitializationWorld == null && this.level() instanceof ServerLevel serverLevel) {
++            this.folia$updateBrainActivityFromSchedule(serverLevel, villagerBrain);
++        }
+     }
+ 
+     @Override
+@@ -295,9 +321,10 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+     }
+     protected void customServerAiStep(ServerLevel level, final boolean inactive) {
+         // Paper end - EAR 2
++        final boolean folia$brainReady = this.folia$tryCompleteDeferredBrainInitialization(level);
+         ProfilerFiller profilerFiller = Profiler.get();
+         profilerFiller.push("villagerBrain");
+-        if (!inactive) this.getBrain().tick(level, this); // Paper - EAR 2
++        if (folia$brainReady && !inactive) this.getBrain().tick(level, this); // Paper - EAR 2
+         profilerFiller.pop();
+         if (this.assignProfessionWhenSpawned) {
+             this.assignProfessionWhenSpawned = false;
+@@ -404,6 +431,14 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+         this.resetSpecialPrices();
+     }
+ 
++    @Override
++    public void postChangeDimension() {
++        super.postChangeDimension();
++        if (this.level() instanceof ServerLevel serverLevel) {
++            this.folia$tryCompleteDeferredBrainInitialization(serverLevel);
++        }
++    }
++
+     private void resetSpecialPrices() {
+         if (!this.level().isClientSide()) {
+             for (MerchantOffer merchantOffer : this.getOffers()) {
