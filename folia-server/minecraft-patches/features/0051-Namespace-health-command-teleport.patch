@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Wed, 26 Aug 2026 00:00:00 +0000
+Subject: [PATCH] Namespace health command teleport action
+
+Adapted from PaperMC/Folia PR #494. Plugins may override /tp; the server health
+command's clickable hotspot navigation must explicitly invoke vanilla
+minecraft:tp to remain deterministic.
+
+
+diff --git a/io/papermc/paper/threadedregions/commands/CommandServerHealth.java b/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
+--- a/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
++++ b/io/papermc/paper/threadedregions/commands/CommandServerHealth.java
+@@ -266,7 +266,7 @@ public final class CommandServerHealth extends Command {
+                 .append(formatRegionStats(region.getData().getRegionStats(), (i + 1) != len))
+                 .build()
+ 
+-                .clickEvent(ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, Payload.string("/minecraft:execute as @s in " + world.getWorld().getKey().toString() + " run tp " + centerBlockX + ".5 " + yLoc + " " + centerBlockZ + ".5")))
++                .clickEvent(ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, Payload.string("/minecraft:execute as @s in " + world.getWorld().getKey().toString() + " run minecraft:tp " + centerBlockX + ".5 " + yLoc + " " + centerBlockZ + ".5")))
+                 .hoverEvent(HoverEvent.hoverEvent(HoverEvent.Action.SHOW_TEXT, Component.text("Click to teleport to " + location, SECONDARY)));
+ 
+             lowestRegionsBuilder.append(line);
