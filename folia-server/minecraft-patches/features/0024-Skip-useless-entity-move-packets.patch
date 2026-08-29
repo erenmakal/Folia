@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Wed, 23 Nov 2022 22:26:37 +0100
+Subject: [PATCH] Better checking for useless entity move packets
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+Gale - https://galemc.org
+Based on Airplane's patch by Paul Sauve <paul@technove.co>.
+
+Avoids entering the relative entity-movement packet construction path when
+neither position nor rotation changed. This touches only the tracker for the
+entity currently owned/ticked by its region and does not introduce shared
+mutable state.
+
+
+diff --git a/net/minecraft/server/level/ServerEntity.java b/net/minecraft/server/level/ServerEntity.java
+--- a/net/minecraft/server/level/ServerEntity.java
++++ b/net/minecraft/server/level/ServerEntity.java
+@@ -186,7 +186,11 @@ public class ServerEntity {
+                     packet = ClientboundEntityPositionSyncPacket.of(this.entity);
+                     sentPosition = true;
+                     sentRotation = true;
+-                } else if ((!pos || !shouldSendRotation) && !(this.entity instanceof AbstractArrow)) {
++                    // Folia performance pack start - Gale/Airplane
++                } else {
++                if (pos || shouldSendRotation || this.entity instanceof AbstractArrow) {
++                    if ((!pos || !shouldSendRotation) && !(this.entity instanceof AbstractArrow)) {
++                        // Folia performance pack end - Gale/Airplane
+                     if (pos) {
+                         packet = new ClientboundMoveEntityPacket.Pos(this.entity.getId(), (short)xa, (short)ya, (short)za, this.entity.onGround());
+                         sentPosition = true;
+@@ -198,6 +202,8 @@ public class ServerEntity {
+                     packet = new ClientboundMoveEntityPacket.PosRot(this.entity.getId(), (short)xa, (short)ya, (short)za, yRotn, xRotn, this.entity.onGround());
+                     sentPosition = true;
+                     sentRotation = true;
++                    }
++                } // Folia performance pack - Gale/Airplane
+                 }
+ 
+                 if (this.entity.needsSync || this.trackDelta || this.entity instanceof LivingEntity livingEntity && livingEntity.isFallFlying()) {
