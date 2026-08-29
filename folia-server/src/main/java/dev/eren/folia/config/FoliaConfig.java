@@ -26,6 +26,7 @@ public final class FoliaConfig {
     public static boolean useBuiltInBlockRegistryForRandomTicks = true;
     public static int inWallCheckInterval = 1;
     public static int villagerItemRepickupDelay = -1;
+    public static boolean disableVanillaDebugSubscribers = false;
 
     private FoliaConfig() {
     }
@@ -57,6 +58,10 @@ public final class FoliaConfig {
         add(config, "performance.villager.item-repickup-delay", -1,
             "Pickup delay applied to items thrown by villagers.",
             "-1 preserves vanilla behaviour; a positive delay can reduce rapid villager item re-pickup churn in dense farms.");
+        add(config, "performance.debug.disable-vanilla-debug-subscribers", false,
+            "Disable vanilla debug subscription tracking and broadcasts.",
+            "Useful on production servers that never use vanilla client debug subscriptions.",
+            "Disabled by default because it removes a debugging feature.");
 
         alternativeKeepAlive = config.getBoolean("networking.alternative-keepalive", false);
         preventEndermanTeleportChunkLoads = config.getBoolean("performance.entity-ai.prevent-enderman-teleport-chunk-loads", true);
@@ -64,6 +69,7 @@ public final class FoliaConfig {
         useBuiltInBlockRegistryForRandomTicks = config.getBoolean("performance.random-tick.use-built-in-block-registry", true);
         inWallCheckInterval = Math.max(1, config.getInt("performance.entity-ticking.in-wall-check-interval", 1));
         villagerItemRepickupDelay = Math.max(-1, config.getInt("performance.villager.item-repickup-delay", -1));
+        disableVanillaDebugSubscribers = config.getBoolean("performance.debug.disable-vanilla-debug-subscribers", false);
 
         config.set("config-version", CURRENT_VERSION);
         config.set("performance.entity-ticking.in-wall-check-interval", inWallCheckInterval);
@@ -76,13 +82,14 @@ public final class FoliaConfig {
         }
 
         LOGGER.info(
-            "Loaded folia.yml (alternative-keepalive={}, enderman-no-load={}, early-target-range={}, random-tick-registry={}, in-wall-interval={}, villager-repickup-delay={})",
+            "Loaded folia.yml (alternative-keepalive={}, enderman-no-load={}, early-target-range={}, random-tick-registry={}, in-wall-interval={}, villager-repickup-delay={}, disable-debug-subscribers={})",
             alternativeKeepAlive,
             preventEndermanTeleportChunkLoads,
             earlyTargetRangeCheck,
             useBuiltInBlockRegistryForRandomTicks,
             inWallCheckInterval,
-            villagerItemRepickupDelay
+            villagerItemRepickupDelay,
+            disableVanillaDebugSubscribers
         );
     }
 
