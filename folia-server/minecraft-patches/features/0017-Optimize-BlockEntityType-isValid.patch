@@ -41,7 +41,7 @@ diff --git a/net/minecraft/world/level/block/state/BlockBehaviour.java b/net/min
      protected final BlockBehaviour.Properties properties;
      protected final Optional<ResourceKey<LootTable>> drops;
      protected final String descriptionId;
-+    public @Nullable BlockEntityType blockEntityType = null; // Folia performance pack - Leaf
++    public @Nullable net.minecraft.world.level.block.entity.BlockEntityType<?> blockEntityType = null; // Folia performance pack - Leaf
  
      public BlockBehaviour(final BlockBehaviour.Properties properties) {
          this.hasCollision = properties.hasCollision;
