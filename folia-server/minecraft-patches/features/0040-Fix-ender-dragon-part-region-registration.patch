@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akram Soqrati <169198624+itarqos5@users.noreply.github.com>
+Date: Thu, 27 Aug 2026 01:20:00 +0000
+Subject: [PATCH] Sync ender dragon parts before region registration
+
+Adapted from PaperMC/Folia PR #504, fixing #427. Dragon sub-entities can retain
+stale coordinates around chunk 0,0 while the parent is registered elsewhere,
+which breaks multipart tracking across region boundaries.
+
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+@@ -86,6 +86,10 @@ public final class ServerEntityLookup extends EntityLookup {
+ 
+     @Override
+     protected void addEntityCallback(final Entity entity) {
++        if (dev.eren.folia.config.FoliaConfig.fixDragonPartRegistration
++            && entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
++            dragon.folia$syncPartPositions();
++        }
+         this.world.getCurrentWorldData().addEntity(entity); // Folia - region threading
+         if (entity instanceof ServerPlayer player) {
+             ((ChunkSystemServerLevel)this.serverWorld).moonrise$getNearbyPlayers().addPlayer(player);
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4463,6 +4463,10 @@ public abstract class Entity
+         Entity copy = this.getType().create(destination, EntitySpawnReason.DIMENSION_TRAVEL);
+         copy.restoreFrom(this);
+         copy.transform(pos, yaw, pitch, velocity);
++        if (dev.eren.folia.config.FoliaConfig.fixDragonPartRegistration
++            && copy instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
++            dragon.folia$syncPartPositions();
++        }
+         // vanilla code used to call remove _after_ copying, and some stuff is required to be after copy - so add hook here
+         // for example, clearing of inventory after switching dimensions
+         this.postRemoveAfterChangingDimensions();
+diff --git a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+--- a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+@@ -1011,4 +1011,10 @@ public class EnderDragon extends Mob implements Enemy {
+         return 500;
+     }
+     // Paper end - init expToDrop for already dying spawned dragon
++
++    public void folia$syncPartPositions() {
++        for (EnderDragonPart part : this.getSubEntities()) {
++            this.tickPart(part, 0.0, 0.0, 0.0);
++        }
++    }
+ }

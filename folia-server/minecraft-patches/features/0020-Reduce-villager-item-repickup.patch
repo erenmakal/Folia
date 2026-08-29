@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Thu, 24 Nov 2022 23:15:49 +0100
+Subject: [PATCH] Reduce villager item re-pickup
+
+License: MIT (https://opensource.org/licenses/MIT)
+Gale - https://galemc.org
+Based on EmpireCraft's "Slow down villager pickup of thrown items" by Aikar.
+
+Adapted for this Folia fork. -1 in folia.yml preserves vanilla behaviour.
+
+
+diff --git a/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java b/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java
+--- a/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java
++++ b/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java
+@@ -101,7 +101,16 @@ public class BehaviorUtils {
+         Vec3 throwVector = targetPos.subtract(thrower.position());
+         throwVector = throwVector.normalize().multiply(throwVelocity.x, throwVelocity.y, throwVelocity.z);
+         itemEntity.setDeltaMovement(throwVector);
+-        itemEntity.setDefaultPickUpDelay();
++        // Folia performance pack - Gale/EmpireCraft
++        if (thrower instanceof net.minecraft.world.entity.npc.villager.Villager
++            && dev.eren.folia.config.FoliaConfig.villagerItemRepickupDelay >= 0) {
++            itemEntity.pickupDelay = dev.eren.folia.config.FoliaConfig.villagerItemRepickupDelay;
++        } else {
++            itemEntity.setDefaultPickUpDelay();
++        }
+         // CraftBukkit start
+         org.bukkit.event.entity.EntityDropItemEvent event = new org.bukkit.event.entity.EntityDropItemEvent(thrower.getBukkitEntity(), (org.bukkit.entity.Item) itemEntity.getBukkitEntity());
+         itemEntity.level().getCraftServer().getPluginManager().callEvent(event);

@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: vLuckyyy <65517973+vLuckyyy@users.noreply.github.com>
+Date: Thu, 5 Feb 2026 21:43:18 +0000
+Subject: [PATCH] Fix ender pearl damage event damager
+
+Adapted from PaperMC/Folia PR #442 / issue #438. Folia's async ender-pearl
+teleport path used the player itself as the Bukkit event damager. Carry the
+pearl through the scheduled teleport and use it as the damage source entity.
+
+
+diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
+--- a/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
++++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/ThrownEnderpearl.java
+@@ -79,8 +79,9 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+     }
+ 
+     // Folia start - region threading
+-    private static void attemptTeleport(Entity source, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
++    private static void attemptTeleport(Entity source, Entity enderPearl, ServerLevel checkWorld, net.minecraft.world.phys.Vec3 to) {
+         final boolean onPortalCooldown = source.isOnPortalCooldown();
++        final Entity enderPearlFinal = enderPearl;
+         // ignore retired callback, in those cases we do not want to teleport
+         source.getBukkitEntity().taskScheduler.schedule(
+             (Entity entity) -> {
+@@ -145,7 +146,9 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+                             // damage player
+                             teleported.resetFallDistance();
+                             player.resetCurrentImpulseContext();
+-                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(player), 5.0F); // CraftBukkit // Paper - fix DamageSource API
++                            player.hurtServer(player.level(), player.damageSources().enderPearl().eventEntityDamager(
++                                dev.eren.folia.config.FoliaConfig.fixEnderPearlDamager ? enderPearlFinal : player
++                            ), 5.0F); // CraftBukkit // Paper - fix DamageSource API
+                             playSound(teleported.level(), to);
+                         } else {
+@@ -168,7 +171,7 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+                 }
+                 Entity entity = this.getOwnerRaw();
+                 if (entity != null) {
+-                    attemptTeleport(entity, (ServerLevel)this.level(), this.position());
++                    attemptTeleport(entity, this, (ServerLevel)this.level(), this.position());
+                 }
+                 this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.HIT);
+                 return;

@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:00:00 +0300
+Subject: [PATCH] Optional cancellable cactus age changes
+
+Paper #13480 documents that BlockGrowEvent covers formation of the new cactus
+block but not the root cactus' own AGE state updates. Plugins therefore cannot
+stop the age from reaching 15 by cancelling BlockGrowEvent.
+
+When enabled, route the self AGE update through the same Bukkit grow helper.
+This intentionally strengthens the event contract and is switchable in
+folia.yml for plugins that depend on upstream behaviour.
+
+
+diff --git a/net/minecraft/world/level/block/CactusBlock.java b/net/minecraft/world/level/block/CactusBlock.java
+--- a/net/minecraft/world/level/block/CactusBlock.java
++++ b/net/minecraft/world/level/block/CactusBlock.java
+@@ -79,7 +79,13 @@ public class CactusBlock extends Block {
+                 level.neighborChanged(aboveBlock, above, this, null, false);
+             } else if (age < 15) {
+-                level.setBlock(pos, state.setValue(AGE, age + 1), Block.UPDATE_NONE);
++                // Folia performance pack - Paper #13480
++                final BlockState agedState = state.setValue(AGE, age + 1);
++                if (dev.eren.folia.config.FoliaConfig.cancellableCactusAge) {
++                    org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockGrowEvent(level, pos, agedState, Block.UPDATE_NONE);
++                } else {
++                    level.setBlock(pos, agedState, Block.UPDATE_NONE);
++                }
+             }
+         }
+     }

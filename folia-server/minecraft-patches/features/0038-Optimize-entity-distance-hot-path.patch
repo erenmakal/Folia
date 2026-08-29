@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:18:00 +0300
+Subject: [PATCH] Optimize entity distance hot path
+
+Leaf-inspired stateless micro-optimization. Avoid the Entity -> Vec3 overload
+hop for the extremely common entity distance calculation and keep the squared
+math directly inlineable by the JIT. No shared cache or mutable cross-region
+state is introduced.
+
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -2465,7 +2465,10 @@ public abstract class Entity
+     }
+ 
+     public double distanceToSqr(final Entity entity) {
+-        return this.distanceToSqr(entity.position());
++        final double xd = this.getX() - entity.getX();
++        final double yd = this.getY() - entity.getY();
++        final double zd = this.getZ() - entity.getZ();
++        return xd * xd + yd * yd + zd * zd;
+     }
+ 
+     public double distanceToSqr(final Vec3 pos) {

@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Mon, 1 Jun 2026 14:06:08 -0700
+Subject: [PATCH] Fix RegionizedWorldData ticking block entity flag
+
+Port PaperMC/Folia PR #462. The setter ignored its argument and always wrote
+true, leaving block-entity ticking state permanently set after the first pass
+and causing avoidable pending ticker bookkeeping. This is a correctness typo,
+not a tuning knob, so it is applied unconditionally.
+
+
+diff --git a/io/papermc/paper/threadedregions/RegionizedWorldData.java b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+--- a/io/papermc/paper/threadedregions/RegionizedWorldData.java
++++ b/io/papermc/paper/threadedregions/RegionizedWorldData.java
+@@ -706,7 +706,7 @@ public final class RegionizedWorldData {
+     }
+ 
+     public void setTickingBlockEntities(final boolean to) {
+-        this.tickingBlockEntities = true;
++        this.tickingBlockEntities = to;
+     }
+ 
+     public List<TickingBlockEntity> getBlockEntityTickers() {

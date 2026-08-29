@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hayanesuru <hayanesuru@outlook.jp>
+Date: Sat, 30 Aug 2025 20:30:37 +0900
+Subject: [PATCH] Optimize empty LivingEntity effect ticks
+
+Adapted from Leaf. Avoids creating/initialising the active-effect iterator for
+the overwhelmingly common case where a living entity has no effects, while
+still draining deferred effect updates exactly as before. The optimization is
+entity-local and therefore compatible with Folia region ownership.
+
+
+diff --git a/net/minecraft/world/entity/LivingEntity.java b/net/minecraft/world/entity/LivingEntity.java
+--- a/net/minecraft/world/entity/LivingEntity.java
++++ b/net/minecraft/world/entity/LivingEntity.java
+@@ -965,6 +965,7 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+ 
+     protected void tickEffects() {
+         if (this.level() instanceof ServerLevel serverLevel) {
++            if (!this.activeEffects.isEmpty()) { // Folia performance pack - Leaf
+             Iterator<Holder<MobEffect>> iterator = this.activeEffects.keySet().iterator();
+ 
+             this.tickingEffects = true; // CraftBukkit
+@@ -989,6 +990,7 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+             }
+             // CraftBukkit start
+             this.tickingEffects = false;
++            } // Folia performance pack - Leaf
+             Runnable task;
+             while ((task = this.deferredEffectUpdates.poll()) != null) {
+                 task.run();

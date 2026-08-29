@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Tue, 11 Aug 2026 16:47:06 -0700
+Subject: [PATCH] Fix max player count offset by one
+
+Adapted from PaperMC/Folia PR #500. Folia's connection accounting uses a
+pre-counted connection set, making the >= comparison one stricter than the
+vanilla/Paper limit semantics.
+
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -164,7 +164,10 @@ public abstract class PlayerList {
+     private boolean countConnection(Connection conn, int limit) {
+         synchronized (this.connectionsStateLock) {
+             int count = this.usersCountedAgainstLimit.size();
+-            if (count >= limit) {
++            final boolean limitReached = dev.eren.folia.config.FoliaConfig.fixMaxPlayerCount
++                ? count > limit
++                : count >= limit;
++            if (limitReached) {
+                 return false;
+             }
+             this.usersCountedAgainstLimit.add(conn);

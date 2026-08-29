@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:05:00 +0300
+Subject: [PATCH] Fix async teleport relative velocity flags
+
+Folia's Bukkit teleportAsync bridge currently drops TeleportFlag.Relative and
+always forwards Vec3.ZERO as the destination velocity. That makes
+VELOCITY_X/Y/Z/ROTATION ineffective (Folia #441).
+
+Reconstruct the velocity update Paper would obtain from a TeleportTransition:
+selected DELTA axes retain their prior motion, ROTATE_DELTA rotates that motion
+by the old-to-new view delta first, and unselected components remain zero.
+This stays on the entity-owning path and does not introduce cross-region reads.
+
+The compatibility fix is switchable through
+fixes.teleport.preserve-relative-velocity in folia.yml.
+
+
+diff --git a/org/bukkit/craftbukkit/entity/CraftEntity.java b/org/bukkit/craftbukkit/entity/CraftEntity.java
+--- a/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -1166,11 +1166,44 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+         // Folia start - region threading
+         java.util.concurrent.CompletableFuture<Boolean> ret = new java.util.concurrent.CompletableFuture<>();
+         java.util.function.Consumer<Entity> run = (Entity nmsEntity) -> {
++            net.minecraft.world.phys.Vec3 folia$velocityUpdate = net.minecraft.world.phys.Vec3.ZERO;
++            if (dev.eren.folia.config.FoliaConfig.fixAsyncTeleportRelativeVelocity) {
++                boolean folia$relativeX = false;
++                boolean folia$relativeY = false;
++                boolean folia$relativeZ = false;
++                boolean folia$rotateDelta = false;
++
++                for (final io.papermc.paper.entity.TeleportFlag folia$flag : teleportFlags) {
++                    if (folia$flag instanceof io.papermc.paper.entity.TeleportFlag.Relative folia$relative) {
++                        switch (folia$relative) {
++                            case VELOCITY_X -> folia$relativeX = true;
++                            case VELOCITY_Y -> folia$relativeY = true;
++                            case VELOCITY_Z -> folia$relativeZ = true;
++                            case VELOCITY_ROTATION -> folia$rotateDelta = true;
++                        }
++                    }
++                }
++
++                net.minecraft.world.phys.Vec3 folia$baseVelocity = nmsEntity.getDeltaMovement();
++                if (folia$rotateDelta) {
++                    final float folia$yawDelta = nmsEntity.getYRot() - locationClone.getYaw();
++                    final float folia$pitchDelta = nmsEntity.getXRot() - locationClone.getPitch();
++                    folia$baseVelocity = folia$baseVelocity
++                        .xRot((float)Math.toRadians(folia$pitchDelta))
++                        .yRot((float)Math.toRadians(folia$yawDelta));
++                }
++
++                folia$velocityUpdate = new net.minecraft.world.phys.Vec3(
++                    folia$relativeX ? folia$baseVelocity.x : 0.0D,
++                    folia$relativeY ? folia$baseVelocity.y : 0.0D,
++                    folia$relativeZ ? folia$baseVelocity.z : 0.0D
++                );
++            }
++
+             boolean success = nmsEntity.teleportAsync(
+                 ((CraftWorld)locationClone.getWorld()).getHandle(),
+                 new net.minecraft.world.phys.Vec3(locationClone.getX(), locationClone.getY(), locationClone.getZ()),
+-                locationClone.getYaw(), locationClone.getPitch(), net.minecraft.world.phys.Vec3.ZERO,
++                locationClone.getYaw(), locationClone.getPitch(), folia$velocityUpdate,
+                 cause == null ? TeleportCause.UNKNOWN : cause,
+                 Entity.TELEPORT_FLAG_LOAD_CHUNK | Entity.TELEPORT_FLAG_TELEPORT_PASSENGERS, // preserve behavior with old API: dismount the entity so it can teleport
+                 (Entity entityTp) -> {

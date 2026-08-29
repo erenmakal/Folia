@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hayanesuru <hayanesuru@outlook.jp>
+Date: Sat, 17 May 2025 19:01:50 +0900
+Subject: [PATCH] Optimize getScaledTrackingDistance
+
+Adapted from Leaf. Avoids an extra virtual call and multiplication when the
+common entity-broadcast-range-percentage value is the default 100.
+
+
+diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
+--- a/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -983,7 +983,9 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+ 
+     @Override
+     public int getScaledTrackingDistance(final int range) {
+-        return this.entityBroadcastRangePercentage() * range / 100;
++        int percentage = this.getProperties().entityBroadcastRangePercentage.get();
++        if (percentage == 100) return range;
++        return percentage * range / 100;
+     }
+ 
+     public int entityBroadcastRangePercentage() {

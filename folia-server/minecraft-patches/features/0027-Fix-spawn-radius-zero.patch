@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:01:00 +0300
+Subject: [PATCH] Fix spawnRadius zero ignoring setworldspawn
+
+Based on PaperMC/Folia PR #475. When spawnRadius is zero, Folia's random spawn
+helper can fall back to the world-border center rather than the configured
+world spawn. Preserve the exact configured spawn in that case.
+
+
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -3242,6 +3242,12 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+         BlockPos spawn = world.getLevelData().getRespawnData().pos();
+         double radius = Math.max(0.0, world.getGameRules().get(GameRules.RESPAWN_RADIUS).doubleValue());
+ 
++        // Folia performance pack - PaperMC/Folia #401 / PR #475
++        if (dev.eren.folia.config.FoliaConfig.fixSpawnRadiusZero && radius <= 0.0) {
++            return spawn;
++        }
++
+         double spawnX = (double)spawn.getX() + 0.5;
+         double spawnZ = (double)spawn.getZ() + 0.5;

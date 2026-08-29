@@ -22,15 +22,21 @@
      updatingMinecraft {
          // oldPaperCommit = "d4fe85375af18bfa88f44d7c1e6a61904ae550cc"
      }
-@@ -86,7 +_,19 @@
+@@ -86,7 +_,21 @@
      }
  }
  
 -val log4jPlugins = sourceSets.create("log4jPlugins")
 +sourceSets {
 +    main {
-+        java { srcDir("../paper-server/src/main/java") }
-+        resources { srcDir("../paper-server/src/main/resources") }
++        java {
++            srcDir("../paper-server/src/main/java")
++            srcDir("src/main/java")
++        }
++        resources {
++            srcDir("../paper-server/src/main/resources")
++            srcDir("src/main/resources")
++        }
 +    }
 +    test {
 +        java { srcDir("../paper-server/src/test/java") }

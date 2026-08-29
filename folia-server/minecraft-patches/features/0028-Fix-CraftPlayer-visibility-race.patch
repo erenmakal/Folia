@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rothes <449181985@qq.com>
+Date: Thu, 19 Mar 2026 10:12:55 +0800
+Subject: [PATCH] Fix CraftPlayer visibility removal race
+
+Adapted from PaperMC/Folia PR #448 (fixes #406). Entity tracking callbacks can
+run in a different region from the player whose visibility map is being
+updated. Queue UUID removals and drain them while ticking that player's local
+chunk-loader context instead of mutating the fastutil map cross-region.
+
+
+diff --git a/org/bukkit/craftbukkit/entity/CraftPlayer.java b/org/bukkit/craftbukkit/entity/CraftPlayer.java
+--- a/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -248,6 +248,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     private long lastSaveTime; // Paper - getLastPlayed replacement API
+     private @Nullable CraftScoreboard scoreboardOverride;
+     public final net.minecraft.network.PacketProcessor packetProcessor = new net.minecraft.network.PacketProcessor(null); // Folia
++    private final java.util.concurrent.ConcurrentLinkedQueue<java.util.UUID> folia$removedVisibilityEntities = new java.util.concurrent.ConcurrentLinkedQueue<>(); // Folia performance pack
+ 
+@@ -2086,9 +2087,25 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+     // Paper end
+ 
+     public void onEntityRemove(Entity entity) {
+-        this.invertedVisibilityEntities.remove(entity.getUUID());
++        if (!dev.eren.folia.config.FoliaConfig.queuedVanishRemovals) {
++            this.invertedVisibilityEntities.remove(entity.getUUID());
++            return;
++        }
++        if (this.invertedVisibilityEntities.isEmpty()) {
++            return;
++        }
++        this.folia$removedVisibilityEntities.offer(entity.getUUID());
++    }
++
++    public void folia$drainVisibilityRemovals() {
++        java.util.UUID uuid;
++        while ((uuid = this.folia$removedVisibilityEntities.poll()) != null) {
++            this.invertedVisibilityEntities.remove(uuid);
++        }
+     }
+ 
+     @Override
+     public boolean canSee(Player player) {
+         return this.canSee((org.bukkit.entity.Entity) player);
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -307,6 +307,9 @@ public final class RegionizedPlayerChunkLoader {
+         TickThread.ensureTickThread("Cannot tick player chunk loader async");
+         long currTime = System.nanoTime();
+         for (final ServerPlayer player : new java.util.ArrayList<>(this.world.getLocalPlayers())) { // Folia - region threding
++            if (dev.eren.folia.config.FoliaConfig.queuedVanishRemovals) {
++                player.getBukkitEntity().folia$drainVisibilityRemovals();
++            }
+             final PlayerChunkLoaderData loader = ((ChunkSystemServerPlayer)player).moonrise$getChunkLoader();
+             if (loader == null || loader.removed || loader.world != this.world) {

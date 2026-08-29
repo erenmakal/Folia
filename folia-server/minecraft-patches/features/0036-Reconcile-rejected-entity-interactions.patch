@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:15:00 +0300
+Subject: [PATCH] Reconcile rejected predicted entity interactions
+
+Fixes the player-side desync described by PaperMC/Folia #502. Keep Folia's
+region ownership check intact; when the packet cannot be processed, resend the
+player's authoritative container/inventory state so client prediction cannot
+leave the held stack visually consumed or duplicated.
+
+This intentionally does not read target equipment off-region. Normal entity
+tracking will correct the target state from its owning region.
+
+
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2969,7 +2969,8 @@ public class ServerGamePacketListenerImpl
+             // Spigot end
+             this.player.resetLastActionTime();
+             this.player.setShiftKeyDown(packet.usingSecondaryAction());
+-            if (target != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(target) && level.getWorldBorder().isWithinBounds(target.blockPosition())) { // Folia - region threading
++            final boolean folia$validInteractionTarget = target != null && ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(target) && level.getWorldBorder().isWithinBounds(target.blockPosition());
++            if (folia$validInteractionTarget) { // Folia - region threading
+                 AABB targetBounds = target.getBoundingBox();
+                 if (this.player.isWithinEntityInteractionRange(targetBounds, io.papermc.paper.configuration.GlobalConfiguration.get().misc.clientInteractionLeniencyDistance.or(3.0))) { // Paper - configurable lenience value for interact range
+                     InteractionHand hand = packet.hand();
+@@ -3006,6 +3007,10 @@ public class ServerGamePacketListenerImpl
+                     }
+                 }
++            } else if (dev.eren.folia.config.FoliaConfig.reconcileRejectedEntityInteractions) {
++                // The client predicts several entity interactions locally. Restore the authoritative player state
++                // rather than silently leaving prediction visible when ownership/range/border validation rejects it.
++                this.player.containerMenu.sendAllDataToRemote();
+             }
+         }
+     }

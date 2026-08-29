@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 01:30:00 +0300
+Subject: [PATCH] Optional disable vanilla debug subscribers
+
+Folia debug subscriptions are not region-thread safe (PaperMC/Folia PR #499,
+issues #472/#432). Production default is disabled in folia.yml. The switch is
+kept for debugging, but when disabled both subscription registration and all
+subscriber processing become immediate no-ops.
+
+
+diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
+--- a/net/minecraft/server/level/ServerPlayer.java
++++ b/net/minecraft/server/level/ServerPlayer.java
+@@ -3461,7 +3461,10 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+     }
+ 
+     public Set<DebugSubscription<?>> debugSubscriptions() {
+-        return !this.server.debugSubscribers().hasRequiredPermissions(this) ? Set.of() : this.requestedDebugSubscriptions;
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) {
++            return Set.of();
++        }
++        return !this.server.debugSubscribers().hasRequiredPermissions(this) ? Set.of() : this.requestedDebugSubscriptions;
+     }
+ 
+     public record RespawnConfig(LevelData.RespawnData respawnData, boolean forced) {
+diff --git a/net/minecraft/util/debug/ServerDebugSubscribers.java b/net/minecraft/util/debug/ServerDebugSubscribers.java
+--- a/net/minecraft/util/debug/ServerDebugSubscribers.java
++++ b/net/minecraft/util/debug/ServerDebugSubscribers.java
+@@ -20,10 +20,12 @@ public class ServerDebugSubscribers {
+     }
+ 
+     private List<ServerPlayer> getSubscribersFor(final DebugSubscription<?> subscription) {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return List.of();
+         return this.enabledSubscriptions.getOrDefault(subscription, List.of());
+     }
+ 
+     public void tick() {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return;
+         this.enabledSubscriptions.values().forEach(List::clear);
+ 
+         for (ServerPlayer player : this.server.getPlayerList().getPlayers()) {
+@@ -36,20 +38,24 @@ public class ServerDebugSubscribers {
+     }
+ 
+     public void broadcastToAll(final DebugSubscription<?> subscription, final Packet<?> packet) {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return;
+         for (ServerPlayer player : this.getSubscribersFor(subscription)) {
+             player.connection.send(packet);
+         }
+     }
+ 
+     public Set<DebugSubscription<?>> enabledSubscriptions() {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return Set.of();
+         return Set.copyOf(this.enabledSubscriptions.keySet());
+     }
+ 
+     public boolean hasAnySubscriberFor(final DebugSubscription<?> subscription) {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return false;
+         return !this.getSubscribersFor(subscription).isEmpty();
+     }
+ 
+     public boolean hasRequiredPermissions(final ServerPlayer player) {
++        if (dev.eren.folia.config.FoliaConfig.disableVanillaDebugSubscribers) return false;
+         NameAndId nameAndId = player.nameAndId();
+         return SharedConstants.IS_RUNNING_IN_IDE && this.server.isSingleplayerOwner(nameAndId) || this.server.getPlayerList().isOp(nameAndId);
+     }

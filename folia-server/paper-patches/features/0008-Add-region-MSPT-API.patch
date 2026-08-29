@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Sun, 30 Aug 2026 02:18:00 +0300
+Subject: [PATCH] Implement region average tick times API
+
+Adapted from PaperMC/Folia PR #391.
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -3094,6 +3094,54 @@ public final class CraftServer implements Server {
+         }
+     }
++
++    @Override
++    public double[] getRegionAverageTickTimes(Location location) {
++        Preconditions.checkArgument(location != null, "Location cannot be null");
++        return this.getRegionAverageTickTimes(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
++    }
++
++    @Override
++    public double[] getRegionAverageTickTimes(org.bukkit.Chunk chunk) {
++        Preconditions.checkArgument(chunk != null, "Chunk cannot be null");
++        return this.getRegionAverageTickTimes(chunk.getWorld(), chunk.getX(), chunk.getZ());
++    }
++
++    @Override
++    public double[] getRegionAverageTickTimes(World world, int chunkX, int chunkZ) {
++        Preconditions.checkArgument(world != null, "World cannot be null");
++        return getAverageTickTimesFromRegion(((CraftWorld)world).getHandle(), chunkX, chunkZ);
++    }
++
++    private static double[] getAverageTickTimesFromRegion(ServerLevel world, int chunkX, int chunkZ) {
++        final io.papermc.paper.threadedregions.ThreadedRegionizer.ThreadedRegion<
++            io.papermc.paper.threadedregions.TickRegions.TickRegionData,
++            io.papermc.paper.threadedregions.TickRegions.TickRegionSectionData
++        > region = world.regioniser.getRegionAtSynchronised(chunkX, chunkZ);
++
++        if (region == null) {
++            return null;
++        }
++
++        final io.papermc.paper.threadedregions.TickRegions.TickRegionData regionData = region.getData();
++        final long currTime = System.nanoTime();
++        final io.papermc.paper.threadedregions.TickRegionScheduler.RegionScheduleHandle handle = regionData.getRegionSchedulingHandle();
++        return new double[] {
++            handle.getTickReport5s(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++            handle.getTickReport15s(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++            handle.getTickReport1m(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++            handle.getTickReport5m(currTime).timePerTickData().segmentAll().average() / 1.0E6,
++            handle.getTickReport15m(currTime).timePerTickData().segmentAll().average() / 1.0E6
++        };
++    }
+     // Folia end - region TPS API
+ }

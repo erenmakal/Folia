@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Mon, 17 Aug 2026 00:00:00 +0000
+Subject: [PATCH] Generate region crash reports
+
+Adapted from PaperMC/Folia PR #463. Region scheduler failures currently log a
+stack trace and shut the server down but do not emit the standard crash report
+with system and region context, making intermittent production failures much
+harder to diagnose.
+
+
+diff --git a/io/papermc/paper/threadedregions/TickRegionScheduler.java b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+--- a/io/papermc/paper/threadedregions/TickRegionScheduler.java
++++ b/io/papermc/paper/threadedregions/TickRegionScheduler.java
+@@ -245,6 +245,15 @@ public final class TickRegionScheduler {
+     private void uncaughtException(final Thread thread, final Throwable thr) {
+         LOGGER.error("Uncaught exception in tick thread \"" + thread.getName() + "\"", thr);
+ 
++        final net.minecraft.CrashReport folia$report = net.minecraft.CrashReport.forThrowable(thr, "Region Scheduler Crash");
++        MinecraftServer.getServer().fillSystemReport(folia$report.getSystemReport());
++        final java.nio.file.Path folia$path = MinecraftServer.getServer().getServerDirectory().resolve("crash-reports")
++            .resolve("crash-" + net.minecraft.util.Util.getFilenameFormattedDateTime() + "-server.txt");
++        if (folia$report.saveToFile(folia$path, net.minecraft.ReportType.CRASH)) {
++            LOGGER.error("This crash report has been saved to: {}", folia$path.toAbsolutePath());
++        } else {
++            LOGGER.error("We were unable to save this crash report to disk.");
++        }
++
+         // prevent further ticks from occurring
+         // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
+         this.scheduler.halt();
+@@ -255,6 +264,20 @@ public final class TickRegionScheduler {
+     private void regionFailed(final RegionScheduleHandle handle, final boolean executingTasks, final Throwable thr) {
+         // when a region fails, we need to shut down the server gracefully
+ 
++        final net.minecraft.CrashReport folia$report = net.minecraft.CrashReport.forThrowable(thr, "Region Crash");
++        MinecraftServer.getServer().fillSystemReport(folia$report.getSystemReport());
++        final net.minecraft.CrashReportCategory folia$category = folia$report.addCategory("Region Context");
++        folia$category.setDetail("Executing Tasks", executingTasks);
++        folia$category.setDetail(
++            "RegionScheduleHandle",
++            handle.region == null ? (handle == RegionizedServer.getGlobalTickData() ? "Global tick" : "Not available") : handle.region.region
++        );
++        final java.nio.file.Path folia$path = MinecraftServer.getServer().getServerDirectory().resolve("crash-reports")
++            .resolve("crash-" + net.minecraft.util.Util.getFilenameFormattedDateTime() + "-server.txt");
++        if (folia$report.saveToFile(folia$path, net.minecraft.ReportType.CRASH)) {
++            LOGGER.error("This crash report has been saved to: {}", folia$path.toAbsolutePath());
++        } else {
++            LOGGER.error("We were unable to save this crash report to disk.");
++        }
++
+         // prevent further ticks from occurring
+         // we CANNOT sync, because WE ARE ON A SCHEDULER THREAD
+         this.scheduler.halt();

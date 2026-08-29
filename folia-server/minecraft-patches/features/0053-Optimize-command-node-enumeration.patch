@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hayanesuru <hayanesuru@outlook.jp>
+Date: Wed, 29 Jul 2026 12:52:50 +0900
+Subject: [PATCH] Optimize command node enumeration
+
+Adapted from Leaf 26.2. Avoid a containsKey + put double hash lookup while
+walking the command graph sent to clients. This path becomes noticeable during
+large login bursts on plugin-heavy servers with large Brigadier trees.
+
+
+diff --git a/net/minecraft/network/protocol/game/ClientboundCommandsPacket.java b/net/minecraft/network/protocol/game/ClientboundCommandsPacket.java
+--- a/net/minecraft/network/protocol/game/ClientboundCommandsPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundCommandsPacket.java
+@@ -85,14 +85,16 @@ public class ClientboundCommandsPacket implements Packet<ClientGamePacketListene
+ 
+         CommandNode<S> node;
+         while ((node = queue.poll()) != null) {
+-            if (!nodeToId.containsKey(node)) {
+-                int id = nodeToId.size();
+-                nodeToId.put(node, id);
+-                queue.addAll(node.getChildren());
+-                if (node.getRedirect() != null) {
+-                    queue.add(node.getRedirect());
++            final int id = nodeToId.size();
++            nodeToId.computeIfAbsent(node, key -> {
++                final CommandNode<S> unseen = (CommandNode<S>)key;
++                queue.addAll(unseen.getChildren());
++                if (unseen.getRedirect() != null) {
++                    queue.add(unseen.getRedirect());
+                 }
+-            }
++                return id;
++            });
+         }
+ 
+         return nodeToId;

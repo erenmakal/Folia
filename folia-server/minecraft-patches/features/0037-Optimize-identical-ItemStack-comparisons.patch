@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Sun, 25 Dec 2022 20:51:32 +0100
+Subject: [PATCH] Optimize identical ItemStack comparisons
+
+Gale/Leaf micro-optimization. This is purely local/reference based and does not
+interact with world or region ownership, so it is safe under Folia parallelism.
+
+
+diff --git a/net/minecraft/world/item/ItemStack.java b/net/minecraft/world/item/ItemStack.java
+--- a/net/minecraft/world/item/ItemStack.java
++++ b/net/minecraft/world/item/ItemStack.java
+@@ -866,11 +866,11 @@ public final class ItemStack implements DataComponentHolder, ItemInstance {
+     }
+ 
+     public static boolean isSameItem(final ItemStack a, final ItemStack b) {
+-        return a.is(b.getItem());
++        return a == b || a.is(b.getItem());
+     }
+ 
+     public static boolean isSameItemSameComponents(final ItemStack a, final ItemStack b) {
+-        return a.is(b.getItem()) && (a.isEmpty() && b.isEmpty() || Objects.equals(a.components, b.components));
++        return a == b || a.is(b.getItem()) && (a.isEmpty() && b.isEmpty() || Objects.equals(a.components, b.components));
+     }
+ 
+     public static boolean matchesIgnoringComponents(final ItemStack a, final ItemStack b, final Predicate<DataComponentType<?>> ignoredPredicate) {

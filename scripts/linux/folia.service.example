@@ -1,0 +1,31 @@
+[Unit]
+Description=Folia Performance Pack Minecraft Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/folia
+Environment=HEAP=30G
+Environment=GC=zgc
+Environment=JAR=folia-server.jar
+ExecStart=/opt/folia/scripts/linux/start-folia.sh
+
+# Let the JVM shut down worlds/region files cleanly.
+KillSignal=SIGINT
+TimeoutStopSec=180
+Restart=on-failure
+RestartSec=3
+
+# 500-player servers can hold many sockets/files. systemd limits override PAM
+# limits, so set it here as well.
+LimitNOFILE=1048576
+TasksMax=infinity
+
+# Do not use realtime scheduling, CPUAffinity or forced NUMA binding here.
+# They need host-specific profiling and can starve Netty/chunk/GC threads.
+
+[Install]
+WantedBy=multi-user.target

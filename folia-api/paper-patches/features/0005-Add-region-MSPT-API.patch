@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Sun, 30 Aug 2026 02:18:00 +0300
+Subject: [PATCH] Add region average tick times API
+
+Adapted from PaperMC/Folia PR #391. Global MSPT is not meaningful on a
+regionized server; expose the same 5s/15s/1m/5m/15m windows already available
+for region TPS so plugins can monitor the location that actually owns work.
+
+
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -3026,6 +3026,36 @@ public final class Bukkit {
+     public static double @Nullable [] getRegionTPS(@NotNull World world, int chunkX, int chunkZ) {
+         return server.getRegionTPS(world, chunkX, chunkZ);
+     }
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a location.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     *
++     * @return average milliseconds per tick, or null if no region owns the location
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull Location location) {
++        return server.getRegionAverageTickTimes(location);
++    }
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a chunk.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     *
++     * @return average milliseconds per tick, or null if no region owns the chunk
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull Chunk chunk) {
++        return server.getRegionAverageTickTimes(chunk);
++    }
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a chunk coordinate.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     *
++     * @return average milliseconds per tick, or null if no region owns the chunk
++     */
++    public static double @Nullable [] getRegionAverageTickTimes(@NotNull World world, int chunkX, int chunkZ) {
++        return server.getRegionAverageTickTimes(world, chunkX, chunkZ);
++    }
+     // Folia end - region TPS API
+ 
+     /**
+
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -2802,6 +2802,30 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+      * @return TPS (5s, 15s, 1m, 5m, 15m), or null if the region doesn't exist
+      */
+     double @Nullable [] getRegionTPS(@NotNull World world, int chunkX, int chunkZ);
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a location.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull Location location);
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a chunk.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull Chunk chunk);
++
++    /**
++     * Gets average tick time in milliseconds for the region owning a chunk coordinate.
++     * Windows are 5s, 15s, 1m, 5m and 15m.
++     */
++    double @Nullable [] getRegionAverageTickTimes(@NotNull World world, int chunkX, int chunkZ);
+     // Folia end - region TPS API
+ }
