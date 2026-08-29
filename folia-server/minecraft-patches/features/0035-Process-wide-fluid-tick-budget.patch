@@ -3,13 +3,15 @@ From: Mattia <mattiapearl@gmail.com>
 Date: Mon, 17 Aug 2026 17:41:57 +0200
 Subject: [PATCH] Add process-wide fluid tick budget
 
-Adapted from PaperMC/Folia PR #503. Folia's per-region fluid limits multiply
-with independently active regions. Add an optional process-wide 50ms budget so
-fluid floods cannot consume the full local allowance in every region at once.
-Work is delayed, never discarded. Configuration lives in this fork's folia.yml.
-
+Folia applies the existing fluid tick limit independently to each
+ticking region, so aggregate work can grow with the number of active
+regions. Add an opt-in process-wide allocation with regional floors,
+equal sharing, bounded age weighting, rotating tie order, and profiler
+counters. Scheduled work is delayed rather than discarded. This fork binds
+the controller directly to folia.yml instead of Paper global configuration.
 
 diff --git a/ca/spottedleaf/leafprofiler/LProfilerRegistry.java b/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
+index a000e8a944ce1c4648e783d45dbd121a977acc43..21f503eff43df54417f084a40d55d1216484c111 100644
 --- a/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
 +++ b/ca/spottedleaf/leafprofiler/LProfilerRegistry.java
 @@ -19,6 +19,8 @@ public final class LProfilerRegistry {
@@ -23,11 +25,13 @@ diff --git a/ca/spottedleaf/leafprofiler/LProfilerRegistry.java b/ca/spottedleaf
      public static final int CHUNK_PROVIDER_TICK = GLOBAL_REGISTRY.createType(ProfileType.TIMER, "Chunk Source Tick");
 diff --git a/io/papermc/paper/threadedregions/FluidTickBudget.java b/io/papermc/paper/threadedregions/FluidTickBudget.java
 new file mode 100644
+index 0000000000000000000000000000000000000000..9eefdfc8f2773d78ced9f38420433bb85f76eab4
 --- /dev/null
 +++ b/io/papermc/paper/threadedregions/FluidTickBudget.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,280 @@
 +package io.papermc.paper.threadedregions;
 +
++import dev.eren.folia.config.FoliaConfig;
 +import java.util.ArrayList;
 +import java.util.Collections;
 +import java.util.Comparator;
@@ -35,7 +39,14 @@ new file mode 100644
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.atomic.AtomicLong;
 +
-+/** Shares bounded fluid tick execution fairly between active Folia regions. */
++/**
++ * Shares a bounded amount of fluid tick execution between Folia regions.
++ *
++ * <p>Allocations use the active-region snapshot from the current or preceding
++ * 50 ms epoch. This makes grant order independent of the order in which region
++ * threads arrive, at the cost of intentionally conservative grants when
++ * regions become active or inactive.</p>
++ */
 +public final class FluidTickBudget {
 +    private static final long EPOCH_NANOS = 50_000_000L;
 +    private static final Object ALLOCATION_LOCK = new Object();
@@ -43,20 +54,12 @@ new file mode 100644
 +    private static final ConcurrentHashMap<RegionizedWorldData, RegionState> STATES = new ConcurrentHashMap<>();
 +    private static volatile long allocationEpoch = Long.MIN_VALUE;
 +
-+    private FluidTickBudget() {}
-+
-+    public static boolean enabled() {
-+        return dev.eren.folia.config.FoliaConfig.fluidTickBudgetEnabled;
++    private FluidTickBudget() {
 +    }
 +
-+    private static Settings settings() {
-+        return new Settings(
-+            dev.eren.folia.config.FoliaConfig.fluidTickProcessMaximum,
-+            dev.eren.folia.config.FoliaConfig.fluidTickRegionMinimum,
-+            dev.eren.folia.config.FoliaConfig.fluidTickTargetAgeTicks,
-+            dev.eren.folia.config.FoliaConfig.fluidTickMaxAgeWeight,
-+            dev.eren.folia.config.FoliaConfig.fluidTickFairSharePercent
-+        );
++    public static boolean enabled() {
++        final boolean config = configuration();
++        return config;
 +    }
 +
 +    public static int acquire(
@@ -66,20 +69,28 @@ new file mode 100644
 +        final long currentTick,
 +        final int localMaximum
 +    ) {
-+        if (!enabled()) return localMaximum;
++        final boolean config = configuration();
++        if (!config) {
++            return localMaximum;
++        }
++        final Settings settings = settings(config);
 +
 +        final long epoch = System.nanoTime() / EPOCH_NANOS;
 +        final RegionState state = STATES.computeIfAbsent(region, ignored -> new RegionState(NEXT_ID.getAndIncrement()));
 +        final boolean due = hasRunnableTicks && oldestRunnableTick <= currentTick;
 +        state.overdueTicks = due ? saturatedAge(currentTick, oldestRunnableTick) : 0L;
-+        state.demand = due ? Math.max(0, localMaximum) : 0;
++        state.demand = due ? localMaximum : 0;
++        // Publish this last so allocation sees the demand and age for this observation.
 +        state.seenEpoch = epoch;
 +
-+        allocateEpoch(epoch, settings());
-+        if (localMaximum <= 0) return 0;
-+
++        allocateEpoch(epoch, settings);
++        if (localMaximum <= 0) {
++            return 0;
++        }
 +        synchronized (state) {
-+            if (state.allocatedEpoch != epoch || state.claimedEpoch == epoch) return 0;
++            if (state.allocatedEpoch != epoch || state.claimedEpoch == epoch) {
++                return 0;
++            }
 +            state.claimedEpoch = epoch;
 +            final int grant = Math.min(localMaximum, state.allocation);
 +            TickRegionScheduler.getProfiler().addCounter(
@@ -91,17 +102,39 @@ new file mode 100644
 +    }
 +
 +    public static void recordUsage(final RegionizedWorldData region, final int executed) {
-+        if (executed <= 0 || !enabled() || STATES.get(region) == null) return;
++        if (executed <= 0 || !enabled() || STATES.get(region) == null) {
++            return;
++        }
 +        TickRegionScheduler.getProfiler().addCounter(
 +            ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK_BUDGET_USED,
 +            executed
 +        );
 +    }
 +
++    private static boolean configuration() {
++        return FoliaConfig.fluidTickBudgetEnabled;
++        // Settings are fork-local and loaded from folia.yml.
++    }
++
++    private static Settings settings(final boolean enabled) {
++        return new Settings(
++            enabled,
++            FoliaConfig.fluidTickProcessMaximum,
++            FoliaConfig.fluidTickRegionMinimum,
++            FoliaConfig.fluidTickTargetAgeTicks,
++            FoliaConfig.fluidTickMaxAgeWeight,
++            FoliaConfig.fluidTickFairSharePercent
++        );
++    }
++
 +    private static void allocateEpoch(final long epoch, final Settings settings) {
-+        if (allocationEpoch >= epoch) return;
++        if (allocationEpoch >= epoch) {
++            return;
++        }
 +        synchronized (ALLOCATION_LOCK) {
-+            if (allocationEpoch >= epoch) return;
++            if (allocationEpoch >= epoch) {
++                return;
++            }
 +            allocationEpoch = epoch;
 +            STATES.entrySet().removeIf(entry -> entry.getValue().seenEpoch < epoch - 2L);
 +
@@ -115,10 +148,10 @@ new file mode 100644
 +            }
 +
 +            final int[] allocations = allocate(settings, epoch, demands);
-+            for (int i = 0; i < activeStates.size(); ++i) {
-+                final RegionState state = activeStates.get(i);
++            for (int index = 0; index < activeStates.size(); ++index) {
++                final RegionState state = activeStates.get(index);
 +                synchronized (state) {
-+                    state.allocation = allocations[i];
++                    state.allocation = allocations[index];
 +                    state.allocatedEpoch = epoch;
 +                }
 +            }
@@ -127,15 +160,21 @@ new file mode 100644
 +
 +    static int[] allocate(final Settings settings, final long epoch, final List<Demand> demands) {
 +        final int[] result = new int[demands.size()];
-+        if (settings.processMaximum() <= 0 || demands.isEmpty()) return result;
++        if (!settings.enabled() || settings.processMaximum() <= 0 || demands.isEmpty()) {
++            return result;
++        }
 +
 +        final List<MutableDemand> active = new ArrayList<>(demands.size());
-+        for (int i = 0; i < demands.size(); ++i) {
-+            final Demand demand = demands.get(i);
-+            if (demand.ticks() > 0) active.add(new MutableDemand(i, demand));
++        for (int index = 0; index < demands.size(); ++index) {
++            final Demand demand = demands.get(index);
++            if (demand.ticks() > 0) {
++                active.add(new MutableDemand(index, demand));
++            }
 +        }
 +        active.sort(Comparator.comparingLong(target -> target.demand.id()));
-+        if (!active.isEmpty()) Collections.rotate(active, -(int)Math.floorMod(epoch, active.size()));
++        if (!active.isEmpty()) {
++            Collections.rotate(active, -(int)Math.floorMod(epoch, active.size()));
++        }
 +
 +        int remaining = settings.processMaximum();
 +        if (!active.isEmpty()) {
@@ -151,45 +190,75 @@ new file mode 100644
 +            while (fairRemaining > 0) {
 +                int unsatisfied = 0;
 +                for (final MutableDemand target : active) {
-+                    if (target.allocation < target.demand.ticks()) ++unsatisfied;
++                    if (target.allocation < target.demand.ticks()) {
++                        ++unsatisfied;
++                    }
 +                }
-+                if (unsatisfied == 0) break;
++                if (unsatisfied == 0) {
++                    break;
++                }
 +                final int share = Math.max(1, fairRemaining / unsatisfied);
 +                boolean progressed = false;
 +                for (final MutableDemand target : active) {
-+                    if (target.allocation >= target.demand.ticks() || fairRemaining == 0) continue;
-+                    final int granted = Math.min(fairRemaining, Math.min(target.demand.ticks() - target.allocation, share));
++                    if (target.allocation >= target.demand.ticks() || fairRemaining == 0) {
++                        continue;
++                    }
++                    final int granted = Math.min(
++                        fairRemaining,
++                        Math.min(target.demand.ticks() - target.allocation, share)
++                    );
 +                    target.allocation += granted;
 +                    fairRemaining -= granted;
 +                    remaining -= granted;
 +                    progressed |= granted != 0;
 +                }
-+                if (!progressed) break;
++                if (!progressed) {
++                    break;
++                }
 +            }
 +
++            // Do not give both equal-pool and reserve rounding remainders to the same tie order.
 +            final List<MutableDemand> ageOrder = new ArrayList<>(active);
-+            if (!ageOrder.isEmpty()) Collections.rotate(ageOrder, -Math.floorMod(fairBudget, ageOrder.size()));
++            if (!ageOrder.isEmpty()) {
++                Collections.rotate(ageOrder, -Math.floorMod(fairBudget, ageOrder.size()));
++            }
 +            while (remaining > 0) {
 +                long totalWeight = 0L;
 +                for (final MutableDemand target : ageOrder) {
-+                    if (target.allocation < target.demand.ticks()) totalWeight += weight(settings, target.demand.overdueTicks());
++                    if (target.allocation < target.demand.ticks()) {
++                        totalWeight += weight(settings, target.demand.overdueTicks());
++                    }
 +                }
-+                if (totalWeight == 0L) break;
++                if (totalWeight == 0L) {
++                    break;
++                }
 +                final int roundBudget = remaining;
 +                boolean progressed = false;
 +                for (final MutableDemand target : ageOrder) {
-+                    if (target.allocation >= target.demand.ticks() || remaining == 0) continue;
-+                    final int share = Math.max(1, (int)((long)roundBudget * weight(settings, target.demand.overdueTicks()) / totalWeight));
-+                    final int granted = Math.min(remaining, Math.min(target.demand.ticks() - target.allocation, share));
++                    if (target.allocation >= target.demand.ticks() || remaining == 0) {
++                        continue;
++                    }
++                    final int share = Math.max(
++                        1,
++                        (int)((long)roundBudget * weight(settings, target.demand.overdueTicks()) / totalWeight)
++                    );
++                    final int granted = Math.min(
++                        remaining,
++                        Math.min(target.demand.ticks() - target.allocation, share)
++                    );
 +                    target.allocation += granted;
 +                    remaining -= granted;
 +                    progressed |= granted != 0;
 +                }
-+                if (!progressed) break;
++                if (!progressed) {
++                    break;
++                }
 +            }
 +        }
 +
-+        for (final MutableDemand target : active) result[target.originalIndex] = target.allocation;
++        for (final MutableDemand target : active) {
++            result[target.originalIndex] = target.allocation;
++        }
 +        return result;
 +    }
 +
@@ -202,13 +271,24 @@ new file mode 100644
 +        return age < 0L ? Long.MAX_VALUE : age;
 +    }
 +
-+    static record Settings(int processMaximum, int regionMinimum, int targetAgeTicks, int maxAgeWeight, int fairSharePercent) {}
-+    static record Demand(long id, int ticks, long overdueTicks) {}
++    static record Settings(
++        boolean enabled,
++        int processMaximum,
++        int regionMinimum,
++        int targetAgeTicks,
++        int maxAgeWeight,
++        int fairSharePercent
++    ) {
++    }
++
++    static record Demand(long id, int ticks, long overdueTicks) {
++    }
 +
 +    private static final class MutableDemand {
 +        private final int originalIndex;
 +        private final Demand demand;
 +        private int allocation;
++
 +        private MutableDemand(final int originalIndex, final Demand demand) {
 +            this.originalIndex = originalIndex;
 +            this.demand = demand;
@@ -223,66 +303,73 @@ new file mode 100644
 +        private volatile long allocatedEpoch = Long.MIN_VALUE;
 +        private volatile long claimedEpoch = Long.MIN_VALUE;
 +        private int allocation;
-+        private RegionState(final long id) { this.id = id; }
++
++        private RegionState(final long id) {
++            this.id = id;
++        }
 +    }
 +}
-+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-+--- a/net/minecraft/server/level/ServerLevel.java
-++++ b/net/minecraft/server/level/ServerLevel.java
-+@@ -857,7 +857,19 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
-+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BLOCK_TICK); } // Folia - profiler
-+             profiler.popPush("fluidTicks");
-+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK); try { // Folia - profiler
-+-            regionizedWorldData.getFluidLevelTicks().tick(tick, paperConfig().environment.maxFluidTicks, this::tickFluid); // Paper - configurable max fluid ticks // Folia - region threading
-++            final LevelTicks<Fluid> folia$fluidTicks = regionizedWorldData.getFluidLevelTicks();
-++            if (io.papermc.paper.threadedregions.FluidTickBudget.enabled()) {
-++                final int folia$executedFluidTicks = folia$fluidTicks.tickBudgeted(
-++                    tick,
-++                    (hasRunnableTicks, oldestRunnableTick) -> io.papermc.paper.threadedregions.FluidTickBudget.acquire(
-++                        regionizedWorldData, hasRunnableTicks, oldestRunnableTick, tick, paperConfig().environment.maxFluidTicks
-++                    ),
-++                    this::tickFluid
-++                );
-++                io.papermc.paper.threadedregions.FluidTickBudget.recordUsage(regionizedWorldData, folia$executedFluidTicks);
-++            } else {
-++                folia$fluidTicks.tick(tick, paperConfig().environment.maxFluidTicks, this::tickFluid);
-++            }
-+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK); } // Folia - profiler
-+             profiler.pop();
-+         }
-+diff --git a/net/minecraft/world/ticks/LevelTicks.java b/net/minecraft/world/ticks/LevelTicks.java
-+--- a/net/minecraft/world/ticks/LevelTicks.java
-++++ b/net/minecraft/world/ticks/LevelTicks.java
-+@@ -165,6 +165,35 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
-+         this.rescheduleLeftoverContainers();
-+     }
-+ 
-++    public int tickBudgeted(final long currentTick, final TickBudget tickBudget, final BiConsumer<BlockPos, T> output) {
-++        ProfilerFiller profiler = Profiler.get();
-++        profiler.push("collect");
-++        this.sortContainersToTick(currentTick);
-++        profiler.incrementCounter("containersToTick", this.containersToTick.size());
-++        final LevelChunkTicks<T> oldestContainer = this.containersToTick.peek();
-++        final int maxTicksToProcess = Math.max(
-++            0,
-++            tickBudget.apply(oldestContainer != null, oldestContainer == null ? 0L : oldestContainer.peek().triggerTick())
-++        );
-++        this.drainContainers(currentTick, maxTicksToProcess);
-++        this.rescheduleLeftoverContainers();
-++        profiler.popPush("run");
-++        final int executed = this.toRunThisTick.size();
-++        profiler.incrementCounter("ticksToRun", executed);
-++        this.runCollectedTicks(output);
-++        profiler.popPush("cleanup");
-++        this.cleanupAfterTick();
-++        profiler.pop();
-++        return executed;
-++    }
-++
-++    @FunctionalInterface
-++    public interface TickBudget {
-++        int apply(boolean hasRunnableTicks, long oldestRunnableTick);
-++    }
-++
-+     private void sortContainersToTick(final long currentTick) {
-+         ObjectIterator<Entry> it = Long2LongMaps.fastIterator(this.nextTickForContainer);
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 35ab432bbd59aba80a6eaca1769e6aa82c8a7e46..025b03bf51fc11f760fdda9d8d2e14fdaf03af05 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -857,7 +857,19 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.BLOCK_TICK); } // Folia - profiler
+             profiler.popPush("fluidTicks");
+             foliaProfiler.startTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK); try { // Folia - profiler
+-            regionizedWorldData.getFluidLevelTicks().tick(tick, paperConfig().environment.maxFluidTicks, this::tickFluid); // Paper - configurable max fluid ticks // Folia - region threading
++            final LevelTicks<Fluid> fluidTicks = regionizedWorldData.getFluidLevelTicks();
++            if (io.papermc.paper.threadedregions.FluidTickBudget.enabled()) {
++                final int executedFluidTicks = fluidTicks.tickBudgeted(
++                    tick,
++                    (hasRunnableTicks, oldestRunnableTick) -> io.papermc.paper.threadedregions.FluidTickBudget.acquire(
++                        regionizedWorldData, hasRunnableTicks, oldestRunnableTick, tick, paperConfig().environment.maxFluidTicks
++                    ),
++                    this::tickFluid
++                );
++                io.papermc.paper.threadedregions.FluidTickBudget.recordUsage(regionizedWorldData, executedFluidTicks);
++            } else {
++                fluidTicks.tick(tick, paperConfig().environment.maxFluidTicks, this::tickFluid);
++            } // Paper - configurable max fluid ticks // Folia - region threading
+             } finally { foliaProfiler.stopTimer(ca.spottedleaf.leafprofiler.LProfilerRegistry.FLUID_TICK); } // Folia - profiler
+             profiler.pop();
+         }
+diff --git a/net/minecraft/world/ticks/LevelTicks.java b/net/minecraft/world/ticks/LevelTicks.java
+index 52a7da01ce84b93a4444a002effa261d20e1a707..ef8aa58d735f210e38bb6f7dc3f3f1a5c49b5f5d 100644
+--- a/net/minecraft/world/ticks/LevelTicks.java
++++ b/net/minecraft/world/ticks/LevelTicks.java
+@@ -165,6 +165,35 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+         this.rescheduleLeftoverContainers();
+     }
+ 
++    // Folia start - process-wide fluid tick budget
++    public int tickBudgeted(final long currentTick, final TickBudget tickBudget, final BiConsumer<BlockPos, T> output) {
++        ProfilerFiller profiler = Profiler.get();
++        profiler.push("collect");
++        this.sortContainersToTick(currentTick);
++        profiler.incrementCounter("containersToTick", this.containersToTick.size());
++        final LevelChunkTicks<T> oldestContainer = this.containersToTick.peek();
++        final int maxTicksToProcess = Math.max(
++            0,
++            tickBudget.apply(oldestContainer != null, oldestContainer == null ? 0L : oldestContainer.peek().triggerTick())
++        );
++        this.drainContainers(currentTick, maxTicksToProcess);
++        this.rescheduleLeftoverContainers();
++        profiler.popPush("run");
++        final int executed = this.toRunThisTick.size();
++        profiler.incrementCounter("ticksToRun", executed);
++        this.runCollectedTicks(output);
++        profiler.popPush("cleanup");
++        this.cleanupAfterTick();
++        profiler.pop();
++        return executed;
++    }
++
++    @FunctionalInterface
++    public interface TickBudget {
++        int apply(boolean hasRunnableTicks, long oldestRunnableTick);
++    }
++    // Folia end - process-wide fluid tick budget
++
+     private void sortContainersToTick(final long currentTick) {
+         ObjectIterator<Entry> it = Long2LongMaps.fastIterator(this.nextTickForContainer);
