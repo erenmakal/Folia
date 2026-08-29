@@ -23,6 +23,7 @@ public final class FoliaConfig {
     // Networking
     public static boolean alternativeKeepAlive = false;
     public static boolean reconcileRejectedEntityInteractions = true;
+    public static boolean precomputeVarLongSizes = true;
 
     // Existing performance options
     public static boolean preventEndermanTeleportChunkLoads = true;
@@ -77,6 +78,9 @@ public final class FoliaConfig {
         add(config, "networking.reconcile-rejected-entity-interactions", true,
             "Resend authoritative inventory/container state when Folia rejects an entity interaction because ownership changed.",
             "Prevents client-prediction ghost item/equipment states without processing the interaction off-region.");
+        add(config, "networking.precompute-varlong-sizes", true,
+            "Use a precomputed VarLong byte-size table on packet encoding hot paths.",
+            "Stateless Velocity/Gale/Leaf-style optimization; safe to leave enabled.");
 
         add(config, "performance.entity-ai.prevent-enderman-teleport-chunk-loads", true,
             "Do not load a chunk only because an Enderman is testing a teleport destination.",
@@ -139,6 +143,7 @@ public final class FoliaConfig {
 
         alternativeKeepAlive = config.getBoolean("networking.alternative-keepalive", false);
         reconcileRejectedEntityInteractions = config.getBoolean("networking.reconcile-rejected-entity-interactions", true);
+        precomputeVarLongSizes = config.getBoolean("networking.precompute-varlong-sizes", true);
         preventEndermanTeleportChunkLoads = config.getBoolean("performance.entity-ai.prevent-enderman-teleport-chunk-loads", true);
         earlyTargetRangeCheck = config.getBoolean("performance.entity-ai.early-target-range-check", true);
         useBuiltInBlockRegistryForRandomTicks = config.getBoolean("performance.random-tick.use-built-in-block-registry", true);
@@ -182,10 +187,11 @@ public final class FoliaConfig {
         }
 
         LOGGER.info(
-            "Loaded folia.yml v{} (alt-keepalive={}, interaction-resync={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
+            "Loaded folia.yml v{} (alt-keepalive={}, interaction-resync={}, varlong-fastpath={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
             CURRENT_VERSION,
             alternativeKeepAlive,
             reconcileRejectedEntityInteractions,
+            precomputeVarLongSizes,
             disableVanillaDebugSubscribers,
             cancellableCactusAge,
             respawnEventBridge,
