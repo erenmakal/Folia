@@ -40,6 +40,11 @@ performance:
     # -1 = vanilla/Paper behaviour. Positive values set a pickup delay on items
     # thrown by villagers and can reduce rapid item re-pickup in dense farms.
     item-repickup-delay: -1
+
+  debug:
+    # Completely bypass vanilla debug subscription tracking/broadcasts.
+    # Leave false if you use the vanilla client debug subscription feature.
+    disable-vanilla-debug-subscribers: false
 ```
 
 Comments are generated into the real file as well. Values that materially
@@ -61,6 +66,7 @@ change behaviour are deliberately conservative by default.
 | Networking | Alternative multiple-outstanding keepalive implementation | Off | Purpur / Canvas |
 | Mob effects | Skip active-effect iterator setup when an entity has no effects | On | Leaf |
 | Entity network | Skip relative movement-packet construction when neither position nor rotation changed | On | Gale / Airplane |
+| Debug | Optional full bypass of vanilla debug subscriber bookkeeping | Off | Leaf-inspired Folia-safe variant |
 
 Patch headers preserve upstream attribution and license notes where applicable.
 
@@ -103,6 +109,10 @@ Suggested procedure:
    pickup/drop churn in profiling.
 7. Leave alternative keepalive disabled unless you have a concrete latency or
    short-stall problem and have tested affected clients/proxies.
+8. On a production server that never uses vanilla debug subscriptions,
+   `disable-vanilla-debug-subscribers: true` is worth A/B testing when
+   `ServerDebugSubscribers#tick` appears in a profile. The implementation is a
+   read-only config fast path; it does not use Leaf's shared tick counter.
 
 ## Thread-count policy
 
@@ -120,7 +130,7 @@ The repository workflow validates the same two stages used by upstream Folia:
 
 ```bash
 ./gradlew applyAllPatches --stacktrace
-./gradlew build
+./gradlew build --stacktrace
 ```
 
 The fork workflow also uploads built JARs when GitHub Actions is enabled for the
