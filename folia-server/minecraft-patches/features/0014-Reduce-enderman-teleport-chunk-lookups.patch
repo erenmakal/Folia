@@ -13,17 +13,18 @@ Adapted for this Folia fork with an opt-out in folia.yml.
 diff --git a/net/minecraft/world/entity/monster/EnderMan.java b/net/minecraft/world/entity/monster/EnderMan.java
 --- a/net/minecraft/world/entity/monster/EnderMan.java
 +++ b/net/minecraft/world/entity/monster/EnderMan.java
-@@ -332,11 +332,22 @@ public class EnderMan extends Monster implements NeutralMob {
+@@ -332,11 +332,24 @@ public class EnderMan extends Monster implements NeutralMob {
      private boolean teleport(final double x, final double y, final double z) {
          BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, y, z);
  
 -        while (pos.getY() > this.level().getMinY() && !this.level().getBlockState(pos).blocksMotion()) {
 -            pos.move(Direction.DOWN);
-+        // Folia performance pack start - Gale/Airplane - single chunk lookup and no teleport-driven chunk load
++        // Folia performance pack start - Gale/Airplane - one chunk lookup and no teleport-driven chunk load
++        net.minecraft.world.level.chunk.LevelChunk folia$chunk = null;
 +        if (dev.eren.folia.config.FoliaConfig.preventEndermanTeleportChunkLoads) {
-+            net.minecraft.world.level.chunk.LevelChunk chunk = this.level().getChunkIfLoaded(pos);
-+            if (chunk == null) return false;
-+            while (pos.getY() > this.level().getMinY() && !chunk.getBlockState(pos).blocksMotion()) {
++            folia$chunk = this.level().getChunkIfLoaded(pos);
++            if (folia$chunk == null) return false;
++            while (pos.getY() > this.level().getMinY() && !folia$chunk.getBlockState(pos).blocksMotion()) {
 +                pos.move(Direction.DOWN);
 +            }
 +        } else {
@@ -33,9 +34,7 @@ diff --git a/net/minecraft/world/entity/monster/EnderMan.java b/net/minecraft/wo
          }
  
 -        BlockState blockState = this.level().getBlockState(pos);
-+        BlockState blockState = dev.eren.folia.config.FoliaConfig.preventEndermanTeleportChunkLoads
-+            ? this.level().getChunkIfLoaded(pos).getBlockState(pos)
-+            : this.level().getBlockState(pos);
++        BlockState blockState = folia$chunk != null ? folia$chunk.getBlockState(pos) : this.level().getBlockState(pos);
 +        // Folia performance pack end - Gale/Airplane
          boolean couldStandOn = blockState.blocksMotion();
          boolean isWet = blockState.getFluidState().is(FluidTags.WATER);
