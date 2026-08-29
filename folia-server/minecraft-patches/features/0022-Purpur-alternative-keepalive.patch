@@ -19,29 +19,31 @@ diff --git a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/
      //private long keepAliveChallenge; // Paper - improve keepalives
      private long closedListenerTime;
      private boolean closed = false;
-+    private final it.unimi.dsi.fastutil.longs.LongList folia$keepAlives = new it.unimi.dsi.fastutil.longs.LongArrayList();
++    private final it.unimi.dsi.fastutil.longs.LongList folia$keepAlives = it.unimi.dsi.fastutil.longs.LongLists.synchronize(new it.unimi.dsi.fastutil.longs.LongArrayList());
      private volatile int latency; // Paper - improve keepalives - make volatile
      private final io.papermc.paper.util.KeepAlive keepAlive; // Paper - improve keepalives
      public volatile boolean suspendFlushingOnServerThread = false;
-@@ -103,6 +104,18 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -103,6 +104,17 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
          // Paper start - improve keepalives
          long now = System.nanoTime();
          io.papermc.paper.util.KeepAlive.PendingKeepAlive pending = this.keepAlive.pendingKeepAlives.peek();
 +        // Folia performance pack start - Purpur/Canvas alternative keepalive
 +        if (dev.eren.folia.config.FoliaConfig.alternativeKeepAlive) {
-+            if (this.keepAlivePending && !this.folia$keepAlives.isEmpty() && this.folia$keepAlives.contains(packet.getId())) {
-+                int ping = (int)(Util.getMillis() - packet.getId());
-+                this.latency = (this.latency * 3 + ping) / 4;
-+                this.keepAlivePending = false;
-+                this.folia$keepAlives.clear();
++            synchronized (this.folia$keepAlives) {
++                if (this.keepAlivePending && this.folia$keepAlives.contains(packet.getId())) {
++                    int ping = (int)(Util.getMillis() - packet.getId());
++                    this.latency = (this.latency * 3 + ping) / 4;
++                    this.keepAlivePending = false;
++                    this.folia$keepAlives.clear();
++                }
 +            }
 +            return;
-+        } else
++        }
 +        // Folia performance pack end - Purpur/Canvas alternative keepalive
          if (pending != null && pending.challengeId() == packet.getId()) {
              this.keepAlive.pendingKeepAlives.remove(pending);
  
-@@ -255,6 +268,23 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+@@ -255,6 +267,28 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
      protected void keepConnectionAlive() {
          long now = Util.getMillis();
          // Paper start - improve keepalives
@@ -51,16 +53,19 @@ diff --git a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/
 +                long currTime = System.nanoTime();
 +                if ((currTime - this.keepAlive.lastKeepAliveTx) >= java.util.concurrent.TimeUnit.SECONDS.toNanos(1L)) {
 +                    this.keepAlive.lastKeepAliveTx = currTime;
-+                    if (this.keepAlivePending && this.folia$keepAlives.size() * 1000L >= KEEPALIVE_LIMIT) {
-+                        this.disconnect(TIMEOUT_DISCONNECTION_MESSAGE, io.papermc.paper.connection.DisconnectionReason.TIMEOUT);
-+                    } else if (this.checkIfClosed(now)) {
-+                        this.keepAlivePending = true;
-+                        this.folia$keepAlives.add(now);
-+                        this.send(new ClientboundKeepAlivePacket(now));
++                    synchronized (this.folia$keepAlives) {
++                        if (this.keepAlivePending && this.folia$keepAlives.size() * 1000L >= KEEPALIVE_LIMIT) {
++                            this.disconnect(TIMEOUT_DISCONNECTION_MESSAGE, io.papermc.paper.connection.DisconnectionReason.TIMEOUT);
++                        } else if (this.checkIfClosed(now)) {
++                            this.keepAlivePending = true;
++                            this.folia$keepAlives.add(now);
++                            this.send(new ClientboundKeepAlivePacket(now));
++                        }
 +                    }
 +                }
 +            }
-+        } else
++            return;
++        }
 +        // Folia performance pack end - Purpur/Canvas alternative keepalive
          if (this.checkIfClosed(now)) {
              long currTime = System.nanoTime();
