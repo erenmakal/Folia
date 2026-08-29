@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hayanesuru <mc@jvavav.com>
+Date: Sat, 19 Apr 2025 22:12:19 +0800
+Subject: [PATCH] Optimize BlockEntityType#isValid
+
+Adapted from Leaf. Block-to-block-entity-type association is initialized during
+registry bootstrap and then read-only during region ticking, making the hot-path
+lookup safe for Folia's region threading model.
+
+
+diff --git a/net/minecraft/world/level/block/entity/BlockEntityType.java b/net/minecraft/world/level/block/entity/BlockEntityType.java
+--- a/net/minecraft/world/level/block/entity/BlockEntityType.java
++++ b/net/minecraft/world/level/block/entity/BlockEntityType.java
+@@ -17,6 +17,14 @@ public class BlockEntityType<T extends BlockEntity> {
+     public BlockEntityType(final BlockEntityType.BlockEntitySupplier<? extends T> factory, final Set<Block> validBlocks) {
+         this.factory = factory;
+         this.validBlocks = validBlocks;
++        // Folia performance pack - Leaf: remove Set lookup from BlockEntityType#isValid.
++        for (Block validBlock : validBlocks) {
++            if (validBlock.blockEntityType != null) {
++                throw new IllegalStateException("Duplicate block entity type");
++            }
++            validBlock.blockEntityType = this;
++        }
+     }
+ 
+     public T create(final BlockPos worldPosition, final BlockState blockState) {
+@@ -24,7 +32,7 @@ public class BlockEntityType<T extends BlockEntity> {
+     }
+ 
+     public boolean isValid(final BlockState state) {
+-        return this.validBlocks.contains(state.getBlock());
++        return state.getBlock().blockEntityType == this; // Folia performance pack - Leaf
+     }
+ 
+     @Deprecated
+diff --git a/net/minecraft/world/level/block/state/BlockBehaviour.java b/net/minecraft/world/level/block/state/BlockBehaviour.java
+--- a/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -100,6 +100,7 @@ public abstract class BlockBehaviour implements FeatureElement {
+     protected final BlockBehaviour.Properties properties;
+     protected final Optional<ResourceKey<LootTable>> drops;
+     protected final String descriptionId;
++    public @Nullable BlockEntityType blockEntityType = null; // Folia performance pack - Leaf
+ 
+     public BlockBehaviour(final BlockBehaviour.Properties properties) {
+         this.hasCollision = properties.hasCollision;
