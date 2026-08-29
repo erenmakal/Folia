@@ -13,7 +13,7 @@ Adapted for this Folia fork with an opt-out in folia.yml.
 diff --git a/net/minecraft/world/entity/ai/targeting/TargetingConditions.java b/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
 --- a/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
 +++ b/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
-@@ -83,9 +83,15 @@ public class TargetingConditions {
+@@ -83,9 +83,16 @@ public class TargetingConditions {
              }
  
              if (this.range > 0.0) {
