@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Thu, 24 Nov 2022 10:31:38 +0100
+Subject: [PATCH] Reduce in wall checks
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+Gale - https://galemc.org
+Based on Pufferfish's "Optimize suffocation" by Kevin Raneri.
+
+Adapted for this Folia fork. The default interval is 1, preserving vanilla
+behaviour; operators can increase it in folia.yml on entity-heavy servers.
+
+
+diff --git a/net/minecraft/world/entity/LivingEntity.java b/net/minecraft/world/entity/LivingEntity.java
+--- a/net/minecraft/world/entity/LivingEntity.java
++++ b/net/minecraft/world/entity/LivingEntity.java
+@@ -458,7 +458,10 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+         profiler.push("livingEntityBaseTick");
+         if (this.isAlive() && this.level() instanceof ServerLevel level) {
+             boolean isPlayer = this instanceof Player;
+-            if (this.isInWall()) {
++            // Folia performance pack - Gale/Pufferfish - reduce expensive suffocation checks.
++            int inWallInterval = dev.eren.folia.config.FoliaConfig.inWallCheckInterval;
++            if ((inWallInterval <= 1 || (this.tickCount % inWallInterval == 0 && this.folia$couldPossiblyBeHurt(1.0F))) && this.isInWall()) {
+                 this.hurtServer(level, this.damageSources().inWall(), 1.0F);
+             } else if (isPlayer && !level.getWorldBorder().isWithinBounds(this.getBoundingBox())) {
+                 double dist = level.getWorldBorder().getDistanceToBorder(this) + level.getWorldBorder().getSafeZone();
+@@ -1455,6 +1458,11 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+         return this.getHealth() <= 0.0F || this.dead;
+     }
+ 
++    // Folia performance pack - Gale/Pufferfish
++    private boolean folia$couldPossiblyBeHurt(final float amount) {
++        return (float)this.invulnerableTime <= (float)this.invulnerableDuration / 2.0F || amount > this.lastHurt;
++    }
++
+     @Override
+     public boolean hurtServer(final ServerLevel level, final DamageSource source, float damage) {
+         if (this.isInvulnerableTo(level, source)) {
