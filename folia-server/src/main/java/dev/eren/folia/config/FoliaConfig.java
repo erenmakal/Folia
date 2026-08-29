@@ -44,6 +44,7 @@ public final class FoliaConfig {
     public static boolean fixMaxPlayerCount = true;
     public static boolean fixDelayedLeashOwnership = true;
     public static boolean fixDragonPartRegistration = true;
+    public static boolean fixVillagerAsyncPortalBrain = true;
 
     // Compatibility event bridges. These are kept switchable because they add
     // event behaviour that upstream Folia intentionally does not fully expose.
@@ -130,6 +131,8 @@ public final class FoliaConfig {
             "Do not restore delayed leash data when its target entity or knot position is owned by another region.");
         add(config, "fixes.region-safety.dragon-part-registration", true,
             "Synchronize Ender Dragon part coordinates before region registration and after cross-dimension transforms.");
+        add(config, "fixes.region-safety.villager-async-portal-brain", true,
+            "Defer Villager brain schedule initialization while an async portal copy is still transitioning to its destination world.");
         add(config, "fixes.events.ender-pearl-damager", true,
             "Use the thrown ender pearl as EntityDamageByEntityEvent damager instead of the player in Folia's async teleport path.");
         add(config, "fixes.player.max-count-off-by-one", true,
@@ -166,6 +169,7 @@ public final class FoliaConfig {
         safePlayerRefresh = config.getBoolean("fixes.region-safety.safe-player-refresh", true);
         fixDelayedLeashOwnership = config.getBoolean("fixes.region-safety.delayed-leash-ownership", true);
         fixDragonPartRegistration = config.getBoolean("fixes.region-safety.dragon-part-registration", true);
+        fixVillagerAsyncPortalBrain = config.getBoolean("fixes.region-safety.villager-async-portal-brain", true);
         fixEnderPearlDamager = config.getBoolean("fixes.events.ender-pearl-damager", true);
         fixMaxPlayerCount = config.getBoolean("fixes.player.max-count-off-by-one", true);
         respawnEventBridge = config.getBoolean("compatibility.events.respawn-bridge", true);
