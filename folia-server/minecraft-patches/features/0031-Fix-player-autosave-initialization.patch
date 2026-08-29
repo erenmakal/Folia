@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Mon, 1 Jun 2026 14:30:00 -0700
+Subject: [PATCH] Fix player autosave initialization
+
+Adapted from PaperMC/Folia PR #459 / Canvas. Folia can leave lastSave at its
+absent sentinel after login, preventing normal interval autosaves until some
+other path saves the player first. Initialize it on join and treat the absent
+sentinel as immediately eligible for autosave.
+
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -283,6 +283,9 @@ public abstract class PlayerList {
+         this.players.add(player);
+         this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
+         this.playersByUUID.put(player.getUUID(), player);
++        if (dev.eren.folia.config.FoliaConfig.fixPlayerAutosave) {
++            player.lastSave = System.nanoTime();
++        }
+         // this.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player))); // CraftBukkit - replaced with loop below
+         // Paper start - Fire PlayerJoinEvent when Player is actually ready; correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
+         player.suppressTrackerForLogin = true;
+@@ -1029,7 +1032,10 @@ public abstract class PlayerList {
+                 continue;
+             }
+             // Folia end - region threading
+-            if (interval == -1 || now - player.lastSave >= timeInterval) { // Folia - region threading
++            if (interval == -1
++                || (dev.eren.folia.config.FoliaConfig.fixPlayerAutosave && player.lastSave == ServerPlayer.LAST_SAVE_ABSENT)
++                || now - player.lastSave >= timeInterval) { // Folia - region threading
+                 this.save(player);
+                 if (interval != -1 && ++numSaved >= io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.maxPerTick()) {
+                     break;
