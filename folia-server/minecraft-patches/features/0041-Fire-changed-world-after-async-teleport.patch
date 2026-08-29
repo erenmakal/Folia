@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: erenmakal <69559506+erenmakal@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 02:22:00 +0300
+Subject: [PATCH] Fire PlayerChangedWorldEvent after async teleport
+
+Adapted from PaperMC/Folia PR #395. Folia's asynchronous cross-world teleport
+path can bypass the Paper event plugins use to observe completed world changes.
+Schedule the event onto the player's owning entity scheduler after the transfer.
+
+
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4407,6 +4407,15 @@ public abstract class Entity
+                 return true;
+             }
+         }
++        else if (dev.eren.folia.config.FoliaConfig.playerChangedWorldAfterAsyncTeleport && this instanceof ServerPlayer) {
++            final org.bukkit.craftbukkit.CraftWorld folia$fromWorld = this.level().getWorld();
++            this.getBukkitEntity().taskScheduler.schedule((Entity entity) -> {
++                final ServerPlayer folia$player = (ServerPlayer)entity;
++                if (folia$player.level().getWorld() != folia$fromWorld) {
++                    org.bukkit.Bukkit.getPluginManager().callEvent(
++                        new org.bukkit.event.player.PlayerChangedWorldEvent(folia$player.getBukkitEntity(), folia$fromWorld));
++                }
++            }, null, 1L);
++        }
+ 
+         EntityTreeNode passengerTree = this.detachPassengers();
+         List<EntityTreeNode> fullPassengerTree = passengerTree.getFullTree();
