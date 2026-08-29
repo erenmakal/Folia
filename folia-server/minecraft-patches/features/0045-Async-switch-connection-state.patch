@@ -1,0 +1,144 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hayanesuru <hayanesuru@outlook.jp>
+Date: Fri, 9 May 2025 16:55:34 +0900
+Subject: [PATCH] Async switch connection state
+
+Adapted from Leaf 26.2 and related Folia #454 discussion. When enabled, avoid
+blocking a Folia tick thread on Netty protocol-pipeline configuration futures.
+The continuation is driven from the ChannelFuture listener and then re-enters
+the server packet processor.
+
+This changes login/configuration protocol timing, so it is opt-in through
+networking.async-switch-connection-state in folia.yml.
+
+
+diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
+--- a/net/minecraft/network/Connection.java
++++ b/net/minecraft/network/Connection.java
+@@ -320,6 +320,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         if (protocol.flow() != this.getReceiving()) {
+             throw new IllegalStateException("Invalid inbound protocol: " + protocol.id());
+         }
++        // Folia performance pack - Leaf: async protocol state switch
++        if (dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState && ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++            this.channel.config().setAutoRead(false);
++        }
+ 
+         this.packetListener = packetListener;
+         this.disconnectListener = null;
+@@ -330,7 +335,14 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+             configMessage = configMessage.andThen(ctx -> ctx.pipeline().addAfter(HandlerNames.DECODER, HandlerNames.BUNDLER, newBundler));
+         }
+ 
+-        syncAfterConfigurationChange(this.channel.writeAndFlush(configMessage));
++        final var folia$future = this.channel.writeAndFlush(configMessage);
++        if (dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState && ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++            folia$future.addListener((ChannelFutureListener)Connection::syncAfterConfigurationChange);
++            return;
++        }
++        syncAfterConfigurationChange(folia$future);
+     }
+ 
+     public void setupOutboundProtocol(final ProtocolInfo<?> protocol) {
+@@ -349,6 +361,30 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         syncAfterConfigurationChange(this.channel.writeAndFlush(configMessage.andThen(ctx -> this.sendLoginDisconnect = isLoginProtocol)));
+     }
+ 
++    public @Nullable ChannelFuture folia$setupOutboundProtocolAsync(final ProtocolInfo<?> protocol) {
++        if (protocol.flow() != this.getSending()) {
++            throw new IllegalStateException("Invalid outbound protocol: " + protocol.id());
++        }
++
++        UnconfiguredPipelineHandler.OutboundConfigurationTask configMessage = UnconfiguredPipelineHandler.setupOutboundProtocol(protocol);
++        BundlerInfo bundlerInfo = protocol.bundlerInfo();
++        if (bundlerInfo != null) {
++            PacketBundleUnpacker newUnbundler = new PacketBundleUnpacker(bundlerInfo);
++            configMessage = configMessage.andThen(
++                ctx -> ctx.pipeline().addAfter(HandlerNames.ENCODER, HandlerNames.UNBUNDLER, newUnbundler)
++            );
++        }
++
++        final boolean isLoginProtocol = protocol.id() == ConnectionProtocol.LOGIN;
++        final var future = this.channel.writeAndFlush(configMessage.andThen(ctx -> this.sendLoginDisconnect = isLoginProtocol));
++        if (dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState) {
++            future.addListener((ChannelFutureListener)Connection::syncAfterConfigurationChange);
++            return future;
++        }
++        return null;
++    }
++
+     public void setListenerForServerboundHandshake(final PacketListener packetListener) {
+         if (this.packetListener != null) {
+             throw new IllegalStateException("Listener already set");
+diff --git a/net/minecraft/server/network/ServerConfigurationPacketListenerImpl.java b/net/minecraft/server/network/ServerConfigurationPacketListenerImpl.java
+--- a/net/minecraft/server/network/ServerConfigurationPacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerConfigurationPacketListenerImpl.java
+@@ -192,11 +192,32 @@ public class ServerConfigurationPacketListenerImpl extends ServerCommonPacketLis
+         this.finishCurrentTask(ServerCodeOfConductConfigurationTask.TYPE);
+     }
+ 
++    private volatile boolean folia$changingState = false;
++
+     @Override
+     public void handleConfigurationFinished(final ServerboundFinishConfigurationPacket packet) {
++        if (dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState && !this.folia$changingState) {
++            this.folia$changingState = true;
++            this.finishCurrentTask(JoinWorldTask.TYPE);
++            this.connection.folia$setupOutboundProtocolAsync(
++                GameProtocols.CLIENTBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(this.server.registryAccess()))
++            ).addListener(ignored -> {
++                try {
++                    PacketUtils.ensureRunningOnSameThread(packet, this, this.server.packetProcessor());
++                } catch (net.minecraft.server.RunningOnDifferentThreadException ignoredDifferentThread) {
++                } catch (io.papermc.paper.util.ServerStopRejectedExecutionException ignoredStop) {
++                } catch (java.util.concurrent.RejectedExecutionException ignoredRejected) {
++                    this.connection.disconnect(Component.translatable("multiplayer.disconnect.server_shutdown"));
++                } catch (ClassCastException exception) {
++                    LOGGER.error("Received {} that couldn't be processed", packet.getClass(), exception);
++                    this.connection.disconnect(Component.translatable("multiplayer.disconnect.invalid_packet"));
++                }
++            });
++            return;
++        }
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.server.packetProcessor());
++        if (!dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState) {
+         this.finishCurrentTask(JoinWorldTask.TYPE);
+         this.connection.setupOutboundProtocol(GameProtocols.CLIENTBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(this.server.registryAccess())));
++        }
+ 
+         try {
+             PlayerList playerList = this.server.getPlayerList();
+diff --git a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+--- a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+@@ -458,11 +458,29 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+         this.disconnect(ServerCommonPacketListenerImpl.DISCONNECT_UNEXPECTED_QUERY);
+     }
+ 
++    private volatile boolean folia$changingState = false;
++
+     @Override
+     public void handleLoginAcknowledgement(final ServerboundLoginAcknowledgedPacket packet) {
++        if (dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState && !this.folia$changingState) {
++            this.folia$changingState = true;
++            this.connection.folia$setupOutboundProtocolAsync(ConfigurationProtocols.CLIENTBOUND).addListener(ignored -> {
++                try {
++                    net.minecraft.network.protocol.PacketUtils.ensureRunningOnSameThread(packet, this, this.server.packetProcessor());
++                } catch (net.minecraft.server.RunningOnDifferentThreadException ignoredDifferentThread) {
++                } catch (io.papermc.paper.util.ServerStopRejectedExecutionException ignoredStop) {
++                } catch (java.util.concurrent.RejectedExecutionException ignoredRejected) {
++                    this.connection.disconnect(Component.translatable("multiplayer.disconnect.server_shutdown"));
++                } catch (ClassCastException exception) {
++                    LOGGER.error("Received {} that couldn't be processed", packet.getClass(), exception);
++                    this.connection.disconnect(Component.translatable("multiplayer.disconnect.invalid_packet"));
++                }
++            });
++            return;
++        }
+         net.minecraft.network.protocol.PacketUtils.ensureRunningOnSameThread(packet, this, this.server.packetProcessor()); // CraftBukkit
+         Validate.validState(this.state == ServerLoginPacketListenerImpl.State.PROTOCOL_SWITCHING, "Unexpected login acknowledgement packet");
+-        this.connection.setupOutboundProtocol(ConfigurationProtocols.CLIENTBOUND);
++        if (!dev.eren.folia.config.FoliaConfig.asyncSwitchConnectionState) this.connection.setupOutboundProtocol(ConfigurationProtocols.CLIENTBOUND);
+         CommonListenerCookie cookie = CommonListenerCookie.createInitial(Objects.requireNonNull(this.authenticatedProfile), this.transferred);
+         ServerConfigurationPacketListenerImpl configPacketListener = new ServerConfigurationPacketListenerImpl(this.server, this.connection, cookie);
+         this.connection.setupInboundProtocol(ConfigurationProtocols.SERVERBOUND, configPacketListener);
