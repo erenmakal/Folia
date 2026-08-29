@@ -4,25 +4,56 @@ on:
   push:
     branches: [ "**" ]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
-    # Only run on PRs if the source branch is on someone else's repo
+    # A branch push already validates same-repository PRs; run the PR event for
+    # external forks as well without duplicating work for local PRs.
     if: ${{ github.event_name != 'pull_request' || github.repository != github.event.pull_request.head.repo.full_name }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Git Repository
         uses: actions/checkout@v6
+
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '25'
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+
       - name: Configure Git User Details
         run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
+
       - name: Apply Patches
         run: ./gradlew applyAllPatches --stacktrace
+
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew build --stacktrace
+
+      - name: Upload server jars
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-performance-pack-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            folia-server/build/libs/*.jar
+            paper-server/build/libs/*.jar
+            !**/*-sources.jar
+            !**/*-javadoc.jar
+
+      - name: Upload Gradle reports on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-reports-${{ github.sha }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            **/build/reports/**
+            **/build/test-results/**
