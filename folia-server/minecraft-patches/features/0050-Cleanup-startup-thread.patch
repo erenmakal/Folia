@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Mon, 17 Aug 2026 00:00:00 +0000
+Subject: [PATCH] Cleanup startup thread
+
+Adapted from PaperMC/Folia PR #465. Once regionized ticking is initialized the
+bootstrap server thread no longer owns a vanilla tick loop. Do not retain an
+unused RegionizedServer instance and do not park the completed startup thread
+forever.
+
+
+diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
+--- a/net/minecraft/server/MinecraftServer.java
++++ b/net/minecraft/server/MinecraftServer.java
+@@ -512,7 +512,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+     // Paper end - rewrite chunk system
+     // Folia start - regionised ticking
+-    public final io.papermc.paper.threadedregions.RegionizedServer regionizedServer = new io.papermc.paper.threadedregions.RegionizedServer();
+ 
+     @Override
+     public <V> CompletableFuture<V> submit(java.util.function.Supplier<V> task) {
+@@ -1311,12 +1310,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+                 io.papermc.paper.threadedregions.RegionizedServer.getInstance().init(); // Folia - region threading - only after loading worlds
+                 final long actualDoneTimeMs = System.currentTimeMillis() - org.bukkit.craftbukkit.Main.BOOT_TIME.toEpochMilli(); // Paper - Improve startup message
+                 LOGGER.info("Done ({})! For help, type \"help\"", String.format(java.util.Locale.ROOT, "%.3fs", actualDoneTimeMs / 1000.00D)); // Paper - Improve startup message
+-                for (;;) {
+-                    try {
+-                        Thread.sleep(Long.MAX_VALUE);
+-                    } catch (final InterruptedException ex) {}
+-                }
++                return;
+             }
+             // Folia end - region threading
+             // Spigot start
