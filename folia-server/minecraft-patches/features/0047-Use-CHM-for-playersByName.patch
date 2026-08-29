@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Fri, 28 Aug 2026 00:00:00 +0000
+Subject: [PATCH] Use CHM for playersByName
+
+Adapted from PaperMC/Folia PR #497. playersByUUID is already concurrent under
+region threading, while the parallel name lookup map remained a HashMap even
+though joins/quits/lookups can occur from independent contexts.
+
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -132,7 +132,7 @@ public abstract class PlayerList {
+ 
+     // CraftBukkit start
+     private org.bukkit.craftbukkit.CraftServer cserver;
+-    private final Map<String,ServerPlayer> playersByName = new java.util.HashMap<>();
++    private final Map<String,ServerPlayer> playersByName = new java.util.concurrent.ConcurrentHashMap<>(); // Folia performance pack - PR #497
+     public @Nullable String collideRuleTeamName; // Paper - Configurable player collision
+ 
