@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Fri, 28 Aug 2026 00:00:00 +0000
+Subject: [PATCH] Disable unsafe runtime reload APIs
+
+Adapted from PaperMC/Folia PR #498. Runtime resource/plugin/datapack reloads
+mutate global registries and player state without a region-safe ownership model.
+Fail explicitly instead of allowing an API call to corrupt or kill unrelated
+regions. Recipe/advancement refreshes themselves are handled separately through
+player-owning schedulers by this fork.
+
+
+diff --git a/src/main/java/io/papermc/paper/datapack/PaperDatapack.java b/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
+--- a/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
++++ b/src/main/java/io/papermc/paper/datapack/PaperDatapack.java
+@@ -28,6 +28,7 @@ public class PaperDatapack extends PaperDiscoveredDatapack implements Datapack {
+ 
+     @Override
+     public void setEnabled(final boolean enabled) {
++        if (true) throw new UnsupportedOperationException("Runtime datapack toggling is unsupported in region threading");
+         final MinecraftServer server = MinecraftServer.getServer();
+         final List<Pack> enabledPacks = new ArrayList<>(server.getPackRepository().getSelectedPacks());
+         final Pack packToChange = server.getPackRepository().getPack(this.getName());
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -948,6 +948,7 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public void reload() {
++        if (true) throw new UnsupportedOperationException("Server/plugin reload is unsupported in region threading");
+         // Paper start - lifecycle events
+         if (io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner.INSTANCE.blocksPluginReloading()) {
+             throw new IllegalStateException(org.bukkit.command.defaults.ReloadCommand.RELOADING_DISABLED_MESSAGE);
+@@ -1084,6 +1085,7 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public void reloadData() {
++        if (true) throw new UnsupportedOperationException("Runtime data reload is unsupported in region threading");
+         ReloadCommand.reload(this.console);
+     }
