@@ -18,7 +18,7 @@ public final class FoliaConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("FoliaConfig");
     private static final File FILE = new File("folia.yml");
-    private static final int CURRENT_VERSION = 2;
+    private static final int CURRENT_VERSION = 3;
 
     // Networking
     public static boolean alternativeKeepAlive = false;
@@ -46,6 +46,7 @@ public final class FoliaConfig {
     public static boolean fixDelayedLeashOwnership = true;
     public static boolean fixDragonPartRegistration = true;
     public static boolean fixVillagerAsyncPortalBrain = true;
+    public static boolean fixAsyncTeleportRelativeVelocity = true;
 
     // Compatibility event bridges. These are kept switchable because they add
     // event behaviour that upstream Folia intentionally does not fully expose.
@@ -138,6 +139,9 @@ public final class FoliaConfig {
             "Synchronize Ender Dragon part coordinates before region registration and after cross-dimension transforms.");
         add(config, "fixes.region-safety.villager-async-portal-brain", true,
             "Defer Villager brain schedule initialization while an async portal copy is still transitioning to its destination world.");
+        add(config, "fixes.teleport.preserve-relative-velocity", true,
+            "Honor Paper TeleportFlag.Relative velocity flags in Folia's Bukkit teleportAsync path.",
+            "Fixes Folia #441; unselected velocity components still reset exactly as Paper semantics require.");
         add(config, "fixes.events.ender-pearl-damager", true,
             "Use the thrown ender pearl as EntityDamageByEntityEvent damager instead of the player in Folia's async teleport path.");
         add(config, "fixes.player.max-count-off-by-one", true,
@@ -176,6 +180,7 @@ public final class FoliaConfig {
         fixDelayedLeashOwnership = config.getBoolean("fixes.region-safety.delayed-leash-ownership", true);
         fixDragonPartRegistration = config.getBoolean("fixes.region-safety.dragon-part-registration", true);
         fixVillagerAsyncPortalBrain = config.getBoolean("fixes.region-safety.villager-async-portal-brain", true);
+        fixAsyncTeleportRelativeVelocity = config.getBoolean("fixes.teleport.preserve-relative-velocity", true);
         fixEnderPearlDamager = config.getBoolean("fixes.events.ender-pearl-damager", true);
         fixMaxPlayerCount = config.getBoolean("fixes.player.max-count-off-by-one", true);
         respawnEventBridge = config.getBoolean("compatibility.events.respawn-bridge", true);
@@ -197,12 +202,13 @@ public final class FoliaConfig {
         }
 
         LOGGER.info(
-            "Loaded folia.yml v{} (alt-keepalive={}, async-state-switch={}, interaction-resync={}, varlong-fastpath={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
+            "Loaded folia.yml v{} (alt-keepalive={}, async-state-switch={}, interaction-resync={}, varlong-fastpath={}, relative-velocity-fix={}, debug-subscribers-disabled={}, cactus-age-fix={}, respawn-bridge={}, fluid-budget={})",
             CURRENT_VERSION,
             alternativeKeepAlive,
             asyncSwitchConnectionState,
             reconcileRejectedEntityInteractions,
             precomputeVarLongSizes,
+            fixAsyncTeleportRelativeVelocity,
             disableVanillaDebugSubscribers,
             cancellableCactusAge,
             respawnEventBridge,
