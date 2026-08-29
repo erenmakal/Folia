@@ -41,6 +41,8 @@ public final class FoliaConfig {
     public static boolean safePlayerRefresh = true;
     public static boolean fixEnderPearlDamager = true;
     public static boolean fixMaxPlayerCount = true;
+    public static boolean fixDelayedLeashOwnership = true;
+    public static boolean fixDragonPartRegistration = true;
 
     // Compatibility event bridges. These are kept switchable because they add
     // event behaviour that upstream Folia intentionally does not fully expose.
@@ -120,6 +122,10 @@ public final class FoliaConfig {
             "Reject stale AI sensor targets after they move to another Folia region.");
         add(config, "fixes.region-safety.safe-player-refresh", true,
             "Run advancement/recipe player refresh work through each player's owning scheduler.");
+        add(config, "fixes.region-safety.delayed-leash-ownership", true,
+            "Do not restore delayed leash data when its target entity or knot position is owned by another region.");
+        add(config, "fixes.region-safety.dragon-part-registration", true,
+            "Synchronize Ender Dragon part coordinates before region registration and after cross-dimension transforms.");
         add(config, "fixes.events.ender-pearl-damager", true,
             "Use the thrown ender pearl as EntityDamageByEntityEvent damager instead of the player in Folia's async teleport path.");
         add(config, "fixes.player.max-count-off-by-one", true,
@@ -127,7 +133,7 @@ public final class FoliaConfig {
 
         add(config, "compatibility.events.respawn-bridge", true,
             "Enable this fork's region-safe PlayerRespawnEvent compatibility bridge.",
-            "The event is executed from an owned player/destination phase rather than by bypassing Folia ownership checks.");
+            "The bridge runs after Folia has completed its destination-region respawn phase; location changes are applied asynchronously afterwards.");
         add(config, "compatibility.events.player-changed-world-after-async-teleport", true,
             "Fire PlayerChangedWorldEvent after a successful cross-world async teleport on the player's owning scheduler.");
 
@@ -153,6 +159,8 @@ public final class FoliaConfig {
         queuedVanishRemovals = config.getBoolean("fixes.region-safety.queued-vanish-removals", true);
         aiSensorOwnershipChecks = config.getBoolean("fixes.region-safety.ai-sensor-ownership-checks", true);
         safePlayerRefresh = config.getBoolean("fixes.region-safety.safe-player-refresh", true);
+        fixDelayedLeashOwnership = config.getBoolean("fixes.region-safety.delayed-leash-ownership", true);
+        fixDragonPartRegistration = config.getBoolean("fixes.region-safety.dragon-part-registration", true);
         fixEnderPearlDamager = config.getBoolean("fixes.events.ender-pearl-damager", true);
         fixMaxPlayerCount = config.getBoolean("fixes.player.max-count-off-by-one", true);
         respawnEventBridge = config.getBoolean("compatibility.events.respawn-bridge", true);
