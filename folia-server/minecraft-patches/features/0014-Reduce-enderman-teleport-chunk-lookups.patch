@@ -13,7 +13,7 @@ Adapted for this Folia fork with an opt-out in folia.yml.
 diff --git a/net/minecraft/world/entity/monster/EnderMan.java b/net/minecraft/world/entity/monster/EnderMan.java
 --- a/net/minecraft/world/entity/monster/EnderMan.java
 +++ b/net/minecraft/world/entity/monster/EnderMan.java
-@@ -332,11 +332,24 @@ public class EnderMan extends Monster implements NeutralMob {
+@@ -332,11 +332,23 @@ public class EnderMan extends Monster implements NeutralMob {
      private boolean teleport(final double x, final double y, final double z) {
          BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, y, z);
  
