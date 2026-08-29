@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Mon, 4 Aug 2025 00:00:00 +0000
+Subject: [PATCH] Preserve teleport command rotation
+
+Adapted from PaperMC/Folia PR #395. TeleportUtils already calculates the yaw
+and pitch selected by the command but Folia's async handoff discarded both by
+passing null. Forward them into teleportAsync so `/tp` preserves/uses the same
+rotation the command resolved.
+
+
+diff --git a/io/papermc/paper/threadedregions/TeleportUtils.java b/io/papermc/paper/threadedregions/TeleportUtils.java
+--- a/io/papermc/paper/threadedregions/TeleportUtils.java
++++ b/io/papermc/paper/threadedregions/TeleportUtils.java
+@@ -48,7 +48,7 @@ public final class TeleportUtils {
+                             return;
+                         }
+                         (useFromRootVehicle ? realFrom.getRootVehicle() : realFrom).teleportAsync(
+-                            ((CraftWorld)loc.getWorld()).getHandle(), pos, null, null, null,
++                            ((CraftWorld)loc.getWorld()).getHandle(), pos, yaw, pitch, null,
+                             cause, teleportFlags, onComplete
+                         );
+                     },
