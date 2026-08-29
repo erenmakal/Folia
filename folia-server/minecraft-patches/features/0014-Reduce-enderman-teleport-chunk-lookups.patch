@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martijn Muijsers <martijnmuijsers@live.nl>
+Date: Wed, 23 Nov 2022 19:53:35 +0100
+Subject: [PATCH] Reduce enderman teleport chunk lookups
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+Gale - https://galemc.org
+
+Based on Airplane's "Reduce chunk loading & lookups" by Paul Sauve.
+Adapted for this Folia fork with an opt-out in folia.yml.
+
+
+diff --git a/net/minecraft/world/entity/monster/EnderMan.java b/net/minecraft/world/entity/monster/EnderMan.java
+--- a/net/minecraft/world/entity/monster/EnderMan.java
++++ b/net/minecraft/world/entity/monster/EnderMan.java
+@@ -332,11 +332,22 @@ public class EnderMan extends Monster implements NeutralMob {
+     private boolean teleport(final double x, final double y, final double z) {
+         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, y, z);
+ 
+-        while (pos.getY() > this.level().getMinY() && !this.level().getBlockState(pos).blocksMotion()) {
+-            pos.move(Direction.DOWN);
++        // Folia performance pack start - Gale/Airplane - single chunk lookup and no teleport-driven chunk load
++        if (dev.eren.folia.config.FoliaConfig.preventEndermanTeleportChunkLoads) {
++            net.minecraft.world.level.chunk.LevelChunk chunk = this.level().getChunkIfLoaded(pos);
++            if (chunk == null) return false;
++            while (pos.getY() > this.level().getMinY() && !chunk.getBlockState(pos).blocksMotion()) {
++                pos.move(Direction.DOWN);
++            }
++        } else {
++            while (pos.getY() > this.level().getMinY() && !this.level().getBlockState(pos).blocksMotion()) {
++                pos.move(Direction.DOWN);
++            }
+         }
+ 
+-        BlockState blockState = this.level().getBlockState(pos);
++        BlockState blockState = dev.eren.folia.config.FoliaConfig.preventEndermanTeleportChunkLoads
++            ? this.level().getChunkIfLoaded(pos).getBlockState(pos)
++            : this.level().getBlockState(pos);
++        // Folia performance pack end - Gale/Airplane
+         boolean couldStandOn = blockState.blocksMotion();
+         boolean isWet = blockState.getFluidState().is(FluidTags.WATER);
+         if (couldStandOn && !isWet) {
