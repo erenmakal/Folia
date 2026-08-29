@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dueris <duerismc@gmail.com>
+Date: Tue, 11 Aug 2026 16:00:55 -0700
+Subject: [PATCH] Make player recipe and advancement refresh region-safe
+
+Adapted from PaperMC/Folia PR #498. Bukkit/API resource refresh paths can run
+outside a player's owning region. Schedule stateful player work through each
+player's scheduler instead of touching every player from one region/global
+context.
+
+
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -1270,8 +1270,18 @@ public abstract class PlayerList {
+         //     playerAdvancements.reload(this.server.getAdvancements());
+         // }
+         for (ServerPlayer player : this.players) {
+-            player.getAdvancements().reload(this.server.getAdvancements());
+-            player.getAdvancements().flushDirty(player, false); // CraftBukkit - trigger immediate flush of advancements
++            if (dev.eren.folia.config.FoliaConfig.safePlayerRefresh) {
++                player.getBukkitEntity().taskScheduler.scheduleOrExecute((ServerPlayer entityPlayer) -> {
++                    entityPlayer.getAdvancements().reload(this.server.getAdvancements());
++                    entityPlayer.getAdvancements().flushDirty(entityPlayer, false);
++                });
++            } else {
++                player.getAdvancements().reload(this.server.getAdvancements());
++                player.getAdvancements().flushDirty(player, false);
++            }
+         }
+         // CraftBukkit end
+ 
+@@ -1292,8 +1302,18 @@ public abstract class PlayerList {
+         );
+ 
+         for (ServerPlayer player : this.players) {
+-            player.connection.send(recipes);
+-            player.getRecipeBook().sendInitialRecipeBook(player);
++            if (dev.eren.folia.config.FoliaConfig.safePlayerRefresh) {
++                // Delay one tick so the owning entity context is stable even when this is called from global/API refresh work.
++                player.getBukkitEntity().taskScheduler.schedule((ServerPlayer entityPlayer) -> {
++                    entityPlayer.connection.send(recipes);
++                    entityPlayer.getRecipeBook().sendInitialRecipeBook(entityPlayer);
++                }, null, 1L);
++            } else {
++                player.connection.send(recipes);
++                player.getRecipeBook().sendInitialRecipeBook(player);
++            }
+         }
+     }
